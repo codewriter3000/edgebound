@@ -369,6 +369,22 @@ button:disabled {
     display: none;
   }
 
+  .board-stage.play {
+    grid-template-columns: 1fr;
+    gap: 6px;
+  }
+
+  .board-stage.play .hint-dock {
+    order: -1;
+  }
+
+  .hint-dock {
+    position: static;
+    height: 112px;
+    max-height: 112px;
+    overflow: auto;
+  }
+
   .board-wrap {
     --board-scale: max(
       0.45,
@@ -415,5 +431,10 @@ button:disabled {
         calc((100vw - 14px) / var(--board-base-size))
       )
     );
+  }
+
+  .hint-dock {
+    height: 98px;
+    max-height: 98px;
   }
 }

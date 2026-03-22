@@ -1,24 +1,24 @@
 {
   "version": 1,
-  "gamesPlayed": 1000,
+  "gamesPlayed": 16000,
   "weights": {
     "setup": {
-      "wide-spread": 0.05,
-      "clustered-narrow": 0.05,
-      "front-loaded": 0.05,
-      "balanced": 0.05
+      "wide-spread": 0.15000000000000002,
+      "clustered-narrow": 0.25,
+      "front-loaded": 902.6500000002716,
+      "balanced": 0.2
     },
     "opening": {
-      "early-pick": 0.05,
-      "rush": 0.05,
+      "early-pick": 0.05000000000000002,
+      "rush": 902.3000000002713,
       "hold": 0.05,
-      "mixed-opening": 0.05
+      "mixed-opening": 0.15000000000000002
     },
     "tactic": {
-      "no-play-actions": 0.05,
-      "pick-heavy": 0.05,
-      "conservative": 0.05,
-      "movement-focused": 0.05
+      "no-play-actions": 179.8999999999878,
+      "pick-heavy": 209.54999999998452,
+      "conservative": 183.99999999998758,
+      "movement-focused": 309.1500000000004
     }
   }
 }

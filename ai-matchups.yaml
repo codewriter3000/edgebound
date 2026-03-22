@@ -12,10 +12,10 @@ matchups:
   - p1:
       name: Spread-Rusher
       strategy:
-        setup: wide-spread
+        setup: front-loaded
         opening: rush
         tactic: movement-focused
     p2:
-      name: Learner
-      strategy: learning
-      weightsFile: src/ai/weights/learner-p1.json
+      name: Spread-Rusher
+      strategy: aggressive
+      weightsFile: src/ai/weights/learner-p2.json

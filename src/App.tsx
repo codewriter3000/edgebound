@@ -36,7 +36,9 @@ export default function App() {
   const multiplayerEnabled =
     import.meta.env.VITE_MULTIPLAYER_ENABLED === 'true' ||
     (import.meta.env.DEV && import.meta.env.VITE_MULTIPLAYER_ENABLED !== 'false')
-  const multiplayerUrl = import.meta.env.VITE_MULTIPLAYER_URL ?? 'ws://127.0.0.1:8787'
+  const defaultWsProtocol = window.location.protocol === 'https:' ? 'wss' : 'ws'
+  const defaultWsHost = `${window.location.hostname}:8787`
+  const multiplayerUrl = import.meta.env.VITE_MULTIPLAYER_URL ?? `${defaultWsProtocol}://${defaultWsHost}`
 
   const [gameState, setGameState] = useState(createInitialGameState)
   const [stateVersion, setStateVersion] = useState(0)
@@ -173,6 +175,7 @@ export default function App() {
   }, [gameState.pieces])
 
   const activePlayer = gameState.phase === 'setup' ? gameState.setupPlayer : gameState.turn
+  const isInGame = !multiplayerEnabled || roomCode != null
   const canControlNow =
     !roomAbandoned && (!multiplayerEnabled || (playerSlot != null && playerSlot === activePlayer))
   const canManageSpectators = multiplayerEnabled && (playerSlot === 'P1' || playerSlot === 'P2')
@@ -600,17 +603,22 @@ export default function App() {
       <section className="panel-row status-row">
         <div className="panel status-panel">
           <h2>Status</h2>
-          {gameState.phase === 'setup' && (
+          {!isInGame && (
+            <p>
+              No active game. Create or join a room to begin.
+            </p>
+          )}
+          {isInGame && gameState.phase === 'setup' && (
             <p>
               Setup: <strong>{gameState.setupPlayer}</strong> places pieces on their half.
             </p>
           )}
-          {gameState.phase === 'play' && (
+          {isInGame && gameState.phase === 'play' && (
             <p>
               Turn: <strong>{gameState.turn}</strong> ({gameState.actionsUsed}/{MAX_MOVES_PER_TURN} actions used)
             </p>
           )}
-          {gameState.phase === 'finished' && gameState.winner != null && (
+          {isInGame && gameState.phase === 'finished' && gameState.winner != null && (
             <p>
               Winner: <strong>{gameState.winner}</strong>
             </p>
@@ -633,7 +641,16 @@ export default function App() {
         </div>
       </section>
 
-      {gameState.phase === 'setup' && canControlNow && (
+      {!isInGame && (
+        <section className="controls panel setup-panel">
+          <h2>Setup Controls</h2>
+          <p>
+            Setup controls will appear after you create or join a room.
+          </p>
+        </section>
+      )}
+
+      {isInGame && gameState.phase === 'setup' && canControlNow && (
         <section className="controls panel setup-panel">
           <h2>Setup Controls</h2>
           <div className="button-group">
@@ -663,7 +680,7 @@ export default function App() {
         </section>
       )}
 
-      {gameState.phase === 'setup' && !canControlNow && (
+      {isInGame && gameState.phase === 'setup' && !canControlNow && (
         <section className="controls panel setup-panel">
           <h2>Setup Controls</h2>
           <p>

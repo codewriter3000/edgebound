@@ -33,7 +33,7 @@ function isCenterLineSpot(spot: Spot): boolean {
 }
 
 export function canPlaceInSetup(spot: Spot, player: Player): boolean {
-  if (isEdgeSpot(spot) || isCenterLineSpot(spot)) {
+  if (spot.kind === 'corner' || isEdgeSpot(spot) || isCenterLineSpot(spot)) {
     return false
   }
 

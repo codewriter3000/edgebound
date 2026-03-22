@@ -16,8 +16,13 @@ import {
 } from '../multiplayer/protocol'
 
 const DEFAULT_PORT = Number(process.env.PORT ?? '8787')
-const PLAYER_RECONNECT_TIMEOUT_MS = Number(process.env.PLAYER_RECONNECT_TIMEOUT_MS ?? '120000')
-const EMPTY_ROOM_TTL_MS = Number(process.env.EMPTY_ROOM_TTL_MS ?? '300000')
+const IS_DEV_ENV = process.env.NODE_ENV == null || process.env.NODE_ENV === 'development'
+const PLAYER_RECONNECT_TIMEOUT_MS = Number(
+  process.env.PLAYER_RECONNECT_TIMEOUT_MS ?? (IS_DEV_ENV ? '0' : '120000'),
+)
+const EMPTY_ROOM_TTL_MS = Number(
+  process.env.EMPTY_ROOM_TTL_MS ?? (IS_DEV_ENV ? '0' : '300000'),
+)
 
 interface ConnectionMeta {
   socket: WebSocket
@@ -172,6 +177,11 @@ export function startMultiplayerServer(port = DEFAULT_PORT, partialConfig?: Part
   }
 
   function scheduleEmptyRoomCleanup(room: RoomState): void {
+    if (config.emptyRoomTtlMs <= 0) {
+      room.emptyRoomTimer = clearTimer(room.emptyRoomTimer)
+      return
+    }
+
     if (hasConnectedParticipants(room)) {
       room.emptyRoomTimer = clearTimer(room.emptyRoomTimer)
       return
@@ -301,6 +311,14 @@ export function startMultiplayerServer(port = DEFAULT_PORT, partialConfig?: Part
   }
 
   function schedulePlayerSlotRelease(room: RoomState, slot: Player, reconnectToken: string): void {
+    if (config.playerReconnectTimeoutMs <= 0) {
+      const player = room.players[slot]
+      if (player != null) {
+        player.disconnectTimer = clearTimer(player.disconnectTimer)
+      }
+      return
+    }
+
     const player = room.players[slot]
     if (player == null) {
       return
