@@ -9,6 +9,7 @@
     "build:server": "tsc -p tsconfig.server.json",
     "preview": "vite preview",
     "start:server": "tsx src/server/index.ts",
+    "ai:train": "tsx src/ai/run.ts",
     "test": "vitest run"
   },
   "devDependencies": {
