@@ -12,6 +12,7 @@ dist
 dist-ssr
 dist-server
 ai-output
+ai-learning-data
 *.local
 
 # Editor directories and files

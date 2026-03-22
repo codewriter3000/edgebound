@@ -11,6 +11,7 @@
     "start:server": "tsx src/server/index.ts",
     "ai:train": "tsx src/ai/run.ts",
     "ai:train:config": "tsx src/ai/run.ts --config ai-matchups.example.yaml",
+    "ai:train:learning": "tsx src/ai/train-learning.ts",
     "test": "vitest run"
   },
   "devDependencies": {

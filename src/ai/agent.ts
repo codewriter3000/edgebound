@@ -4,6 +4,8 @@ import { canPlaceInSetup, hasRequiredSetupSpacing } from '../game/rules'
 import { SPOT_BY_ID, ALL_SPOTS } from '../game/board'
 import { PIECE_LIMITS, SHAPES, LATTICE_MAX } from '../game/constants'
 import type { Player, PieceType, Spot } from '../game/types'
+import type { LearnedWeights } from './learning'
+import { pickStrategy } from './learning'
 
 const P1_GOAL_Y = 1
 const P2_GOAL_Y = LATTICE_MAX - 1
@@ -13,12 +15,12 @@ const INITIAL_PIECE_COUNT = Object.values(PIECE_LIMITS).reduce((sum, n) => sum +
 export type SetupStrategy = 'wide-spread' | 'clustered-narrow' | 'front-loaded' | 'balanced'
 export type OpeningStrategy = 'early-pick' | 'rush' | 'hold' | 'mixed-opening'
 export type TacticStrategy = 'no-play-actions' | 'pick-heavy' | 'conservative' | 'movement-focused'
-export type StrategyKind = 'random' | 'aggressive' | 'defensive'
+export type StrategyKind = 'random' | 'aggressive' | 'defensive' | 'learning'
 
 export const SETUP_STRATEGIES: SetupStrategy[] = ['wide-spread', 'clustered-narrow', 'front-loaded', 'balanced']
 export const OPENING_STRATEGIES: OpeningStrategy[] = ['early-pick', 'rush', 'hold', 'mixed-opening']
 export const TACTIC_STRATEGIES: TacticStrategy[] = ['no-play-actions', 'pick-heavy', 'conservative', 'movement-focused']
-export const STRATEGY_KINDS: StrategyKind[] = ['random', 'aggressive', 'defensive']
+export const STRATEGY_KINDS: StrategyKind[] = ['random', 'aggressive', 'defensive', 'learning']
 
 export interface StrategyDetail {
   setup: SetupStrategy
@@ -29,6 +31,7 @@ export interface StrategyDetail {
 export interface AgentConfig {
   name: string
   strategy: StrategyKind | StrategyDetail
+  learnedWeights?: LearnedWeights
 }
 
 export function formatStrategy(strategy: StrategyKind | StrategyDetail): string {
@@ -400,6 +403,17 @@ export function chooseAction(state: GameState, player: Player, config: AgentConf
       return getSetupAction(state, player, config.strategy.setup)
     }
     return getPlayActionDetailed(state, player, config.strategy)
+  }
+
+  if (config.strategy === 'learning') {
+    if (config.learnedWeights == null) {
+      throw new Error('learning strategy requires learnedWeights on AgentConfig')
+    }
+    const detail = pickStrategy(config.learnedWeights)
+    if (state.phase === 'setup') {
+      return getSetupAction(state, player, detail.setup)
+    }
+    return getPlayActionDetailed(state, player, detail)
   }
 
   if (state.phase === 'setup') {
