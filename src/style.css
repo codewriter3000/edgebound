@@ -15,8 +15,11 @@
   --cell-dark: #252c3c;
   --cell-center-line-b: #442b2b;
   --cell-center-line-a: #3c2525;
-  --cell-center-core-a: #30253c;
-  --cell-center-core-b: #382b44;
+  --cell-center-core-a: #30253c; /* DARK */
+  --cell-center-core-b: #382b44; /* LIGHT */
+  --cell-far-row-a: #3c3a25; /* DARK */
+  --cell-far-row-b: #44422b; /* LIGHT */
+  --board-base-size: 714px;
   color-scheme: dark;
 }
 
@@ -207,6 +210,14 @@ button:disabled {
   background: var(--cell-center-line-b);
 }
 
+.cell.far-row.a {
+  background: var(--cell-far-row-a);
+}
+
+.cell.far-row.b {
+  background: var(--cell-far-row-b);
+}
+
 .spot {
   position: absolute;
   transform: translate(-50%, -50%);
@@ -287,24 +298,122 @@ button:disabled {
 }
 
 @media (max-width: 860px) {
-  .panel-row {
-    grid-template-columns: 1fr;
-  }
-
-  .board-stage.play {
-    grid-template-columns: 1fr;
-  }
-
-  .hint-dock {
-    position: static;
-    max-height: none;
+  #app {
+    min-height: 100dvh;
   }
 
   .game-shell {
-    padding: 12px;
+    min-height: 100dvh;
+    height: auto;
+    padding: 8px;
+    gap: 6px;
+    overflow: visible;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .app-header {
+    display: none;
+  }
+
+  .panel {
+    padding: 7px;
+  }
+
+  h2 {
+    font-size: 0.96rem;
+  }
+
+  .panel p,
+  .controls p,
+  .piece-list li {
+    font-size: 0.72rem;
+    margin-top: 3px;
+    line-height: 1.1;
+  }
+
+  .setup-panel {
+    height: auto;
+    min-height: 56px;
+    overflow: visible;
+  }
+
+  .button-group {
+    gap: 5px;
+    margin-top: 4px;
+  }
+
+  button,
+  .button-group input {
+    font-size: 0.75rem;
+    padding: 4px 6px;
+  }
+
+  .multiplayer-panel .button-group {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    align-items: center;
+  }
+
+  .multiplayer-panel .button-group input {
+    min-width: 0;
+    width: 100%;
+  }
+
+  .status-row {
+    grid-template-columns: 1fr;
+    gap: 6px;
+  }
+
+  .piece-limits-panel {
+    display: none;
   }
 
   .board-wrap {
-    padding: 8px;
+    --board-scale: max(
+      0.45,
+      min(
+        1,
+        calc((100vw - 18px) / var(--board-base-size))
+      )
+    );
+    padding: 4px;
+    overflow: auto;
+    display: flex;
+    justify-content: center;
+    align-items: flex-start;
+    flex: none;
+    height: auto;
+  }
+
+  .board-grid {
+    transform: scale(var(--board-scale));
+    transform-origin: top center;
+    margin: 0;
+  }
+
+  .footer-actions {
+    display: none;
+  }
+}
+
+@media (max-width: 460px) {
+  .setup-panel {
+    min-height: 48px;
+  }
+
+  .panel p,
+  .controls p {
+    font-size: 0.68rem;
+  }
+
+  .board-wrap {
+    --board-scale: max(
+      0.44,
+      min(
+        1,
+        calc((100vw - 14px) / var(--board-base-size))
+      )
+    );
   }
 }

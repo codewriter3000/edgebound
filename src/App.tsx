@@ -524,7 +524,7 @@ export default function App() {
 
   return (
     <div className="game-shell">
-      <header>
+      <header className="app-header">
         <h1>Edgebound</h1>
         <p>
           Place pieces on your half, then take turns making 4 actions. First to reach
@@ -533,7 +533,7 @@ export default function App() {
       </header>
 
       {multiplayerEnabled && (
-        <section className="panel">
+        <section className="panel multiplayer-panel">
           <h2>Multiplayer</h2>
           <p>
             Connection: <strong>{connectionStatus}</strong>
@@ -597,8 +597,8 @@ export default function App() {
         </section>
       )}
 
-      <section className="panel-row">
-        <div className="panel">
+      <section className="panel-row status-row">
+        <div className="panel status-panel">
           <h2>Status</h2>
           {gameState.phase === 'setup' && (
             <p>
@@ -617,7 +617,7 @@ export default function App() {
           )}
         </div>
 
-        <div className="panel">
+        <div className="panel piece-limits-panel">
           <h2>Piece Limits</h2>
           <ul className="piece-list">
             {(['triangle', 'square', 'circle'] as PieceType[]).map((shape) => (

@@ -38,9 +38,14 @@ export default function GameBoard({
 
   function getCellClass(row: number, col: number): string {
     const parity = (row + col) % 2 === 0 ? 'a' : 'b'
+    const isFarSquareRow = row === 0 || row === GRID_SIZE - 1
     const inCenterBlock =
       (row === centerTopRow || row === centerBottomRow) &&
       (col === centerLeftCol || col === centerRightCol)
+
+    if (isFarSquareRow) {
+      return `cell far-row ${parity}`
+    }
 
     if (inCenterBlock) {
       return `cell center-core ${parity}`
