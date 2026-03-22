@@ -1,0 +1,23 @@
+# Copy this file to ai-matchups.yaml and edit as needed.
+# Usage:
+#   npm run ai:train:config
+# or:
+#   npm run ai:train -- --config ./path/to/file.yaml
+
+numGames: 1000
+maxTurns: 600
+outputDir: ai-output/custom-experiments
+
+matchups:
+  - p1:
+      name: Spread-Rusher
+      strategy:
+        setup: wide-spread
+        opening: rush
+        tactic: movement-focused
+    p2:
+      name: Cluster-Picker
+      strategy:
+        setup: clustered-narrow
+        opening: hold
+        tactic: conservative

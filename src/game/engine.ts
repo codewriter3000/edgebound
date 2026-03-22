@@ -1,5 +1,6 @@
 import {
   LATTICE_MAX,
+  MAX_FIRST_TURN_ACTIONS,
   MAX_MOVES_PER_TURN,
   PIECE_LIMITS,
   SHAPES,
@@ -26,6 +27,7 @@ export interface GameState {
   actionsUsed: number
   actedPieceIds: string[]
   pickPointIds: string[]
+  isFirstP1Turn: boolean
 }
 
 export type GameAction =
@@ -61,12 +63,13 @@ export function createInitialGameState(): GameState {
   return {
     phase: 'setup',
     pieces: [],
-    setupPlayer: 'P1',
+    setupPlayer: 'P2',
     turn: 'P1',
     winner: null,
     actionsUsed: 0,
     actedPieceIds: [],
     pickPointIds: [],
+    isFirstP1Turn: false,
   }
 }
 
@@ -141,7 +144,12 @@ function registerAction(
     ? state.actedPieceIds
     : [...state.actedPieceIds, actorId]
 
-  if (nextActionsUsed >= MAX_MOVES_PER_TURN) {
+  const actionLimit =
+    state.isFirstP1Turn && state.turn === 'P1'
+      ? MAX_FIRST_TURN_ACTIONS
+      : MAX_MOVES_PER_TURN
+
+  if (nextActionsUsed >= actionLimit) {
     return {
       ...state,
       pieces: updatedPieces,
@@ -149,6 +157,7 @@ function registerAction(
       actionsUsed: 0,
       actedPieceIds: [],
       pickPointIds: nextPickPointIds,
+      isFirstP1Turn: false,
     }
   }
 
@@ -223,13 +232,13 @@ function applySetupPlacement(
     }
   }
 
-  if (state.setupPlayer === 'P1') {
+  if (state.setupPlayer === 'P2') {
     return {
       accepted: true,
       state: {
         ...state,
         pieces: nextPieces,
-        setupPlayer: 'P2',
+        setupPlayer: 'P1',
       },
     }
   }
@@ -243,6 +252,7 @@ function applySetupPlacement(
       turn: 'P1',
       actionsUsed: 0,
       actedPieceIds: [],
+      isFirstP1Turn: true,
     },
   }
 }
@@ -391,6 +401,7 @@ function applyEndTurn(state: GameState, actor: Player): ApplyActionResult {
       turn: otherPlayer(state.turn),
       actionsUsed: 0,
       actedPieceIds: [],
+      isFirstP1Turn: state.isFirstP1Turn && state.turn !== 'P1' ? true : false,
     },
   }
 }

@@ -2,14 +2,16 @@ import * as fs from 'node:fs'
 import * as path from 'node:path'
 import { runSelfPlay, formatSelfPlayResults, formatAllGameLogs } from './selfplay'
 import type { AgentConfig } from './agent'
+import { formatStrategy } from './agent'
 import { analyzeResults, formatAnalysisReport } from './analysis'
 import { generateStrategyMarkdown } from './strategy-tracker'
+import { loadAiConfig } from './config'
 
-const NUM_GAMES = parseInt(process.env.NUM_GAMES ?? '20', 10)
-const MAX_TURNS = parseInt(process.env.MAX_TURNS ?? '500', 10)
-const OUTPUT_DIR = process.env.OUTPUT_DIR ?? path.resolve(import.meta.dirname, '..', '..', 'ai-output')
+const DEFAULT_NUM_GAMES = 20
+const DEFAULT_MAX_TURNS = 500
+const DEFAULT_OUTPUT_DIR = path.resolve(import.meta.dirname, '..', '..', 'ai-output')
 
-const matchups: Array<{ p1: AgentConfig; p2: AgentConfig }> = [
+const defaultMatchups: Array<{ p1: AgentConfig; p2: AgentConfig }> = [
   {
     p1: { name: 'Random-P1', strategy: 'random' },
     p2: { name: 'Random-P2', strategy: 'random' },
@@ -28,13 +30,69 @@ const matchups: Array<{ p1: AgentConfig; p2: AgentConfig }> = [
   },
 ]
 
+function parseConfigPathFromArgs(args: string[]): string | undefined {
+  for (let i = 0; i < args.length; i += 1) {
+    const arg = args[i]
+    if (arg === '--config' && i + 1 < args.length) {
+      return args[i + 1]
+    }
+
+    if (arg.startsWith('--config=')) {
+      return arg.slice('--config='.length)
+    }
+  }
+
+  // Accept a bare positional arg as the config path (npm eats --config)
+  const positional = args.filter((a) => !a.startsWith('-'))
+  if (positional.length > 0) {
+    return positional[0]
+  }
+
+  return undefined
+}
+
+function readPositiveIntegerFromEnv(
+  envValue: string | undefined,
+  fallback: number,
+  envName: string,
+): number {
+  if (envValue == null) {
+    return fallback
+  }
+
+  const parsed = parseInt(envValue, 10)
+  if (!Number.isInteger(parsed) || parsed <= 0) {
+    throw new Error(`${envName} must be a positive integer.`)
+  }
+
+  return parsed
+}
+
 function main(): void {
+  const configPathFromArgs = parseConfigPathFromArgs(process.argv.slice(2))
+  const configPath = configPathFromArgs ?? process.env.AI_CONFIG
+  const loadedConfig = configPath != null ? loadAiConfig(configPath) : null
+
+  const matchups = loadedConfig?.matchups ?? defaultMatchups
+  const numGamesFallback = loadedConfig?.numGames ?? DEFAULT_NUM_GAMES
+  const maxTurnsFallback = loadedConfig?.maxTurns ?? DEFAULT_MAX_TURNS
+
+  const NUM_GAMES = readPositiveIntegerFromEnv(process.env.NUM_GAMES, numGamesFallback, 'NUM_GAMES')
+  const MAX_TURNS = readPositiveIntegerFromEnv(process.env.MAX_TURNS, maxTurnsFallback, 'MAX_TURNS')
+  const OUTPUT_DIR = process.env.OUTPUT_DIR
+    ?? (loadedConfig?.outputDir != null
+      ? path.resolve(loadedConfig.sourceDir, loadedConfig.outputDir)
+      : DEFAULT_OUTPUT_DIR)
+
   fs.mkdirSync(OUTPUT_DIR, { recursive: true })
 
   console.log('=== Edgebound AI Self-Play Training ===')
   console.log(`Running ${NUM_GAMES} games per matchup, ${matchups.length} matchups`)
   console.log(`Max turns per game: ${MAX_TURNS}`)
   console.log(`Output directory: ${OUTPUT_DIR}`)
+  if (loadedConfig != null) {
+    console.log(`Config file: ${loadedConfig.sourcePath}`)
+  }
   console.log('')
 
   const allStrategyLines: string[] = []
@@ -45,7 +103,7 @@ function main(): void {
 
   for (let m = 0; m < matchups.length; m += 1) {
     const matchup = matchups[m]
-    console.log(`--- Matchup ${m + 1}: ${matchup.p1.name} (${matchup.p1.strategy}) vs ${matchup.p2.name} (${matchup.p2.strategy}) ---`)
+    console.log(`--- Matchup ${m + 1}: ${matchup.p1.name} (${formatStrategy(matchup.p1.strategy)}) vs ${matchup.p2.name} (${formatStrategy(matchup.p2.strategy)}) ---`)
 
     const result = runSelfPlay({
       p1: matchup.p1,
@@ -63,7 +121,7 @@ function main(): void {
     totalDraws += result.draws
     totalGames += result.totalGames
 
-    const matchupDir = path.join(OUTPUT_DIR, `matchup-${m + 1}-${matchup.p1.strategy}-vs-${matchup.p2.strategy}`)
+    const matchupDir = path.join(OUTPUT_DIR, `matchup-${m + 1}-${formatStrategy(matchup.p1.strategy)}-vs-${formatStrategy(matchup.p2.strategy)}`)
     fs.mkdirSync(matchupDir, { recursive: true })
 
     fs.writeFileSync(

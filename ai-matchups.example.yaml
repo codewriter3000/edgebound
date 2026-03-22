@@ -1,0 +1,45 @@
+# Copy this file to ai-matchups.yaml and edit as needed.
+# Usage:
+#   npm run ai:train:config
+# or:
+#   npm run ai:train -- --config ./path/to/file.yaml
+
+numGames: 1000
+maxTurns: 600
+outputDir: ai-output/custom-experiments
+
+matchups:
+  # Shorthand strategies (backward compatible)
+  - p1: random
+    p2: aggressive
+
+  # Object form with custom names
+  - p1:
+      name: Defensive-P1
+      strategy: defensive
+    p2:
+      name: Aggressive-P2
+      strategy: aggressive
+
+  # Per-phase strategy: full control over setup, opening, and tactic
+  - p1:
+      name: Spread-Rusher
+      strategy:
+        setup: wide-spread
+        opening: rush
+        tactic: movement-focused
+    p2:
+      name: Cluster-Picker
+      strategy:
+        setup: clustered-narrow
+        opening: early-pick
+        tactic: pick-heavy
+
+  # Mix shorthand and per-phase freely
+  - p1: aggressive
+    p2:
+      name: Turtle
+      strategy:
+        setup: front-loaded
+        opening: hold
+        tactic: conservative

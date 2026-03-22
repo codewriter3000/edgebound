@@ -10,6 +10,7 @@
     "preview": "vite preview",
     "start:server": "tsx src/server/index.ts",
     "ai:train": "tsx src/ai/run.ts",
+    "ai:train:config": "tsx src/ai/run.ts --config ai-matchups.example.yaml",
     "test": "vitest run"
   },
   "devDependencies": {
@@ -26,6 +27,7 @@
   "dependencies": {
     "react": "^19.2.4",
     "react-dom": "^19.2.4",
-    "ws": "^8.20.0"
+    "ws": "^8.20.0",
+    "yaml": "^2.8.1"
   }
 }
