@@ -45,10 +45,10 @@ export function createInitialWeights(): LearnedWeights {
 function weightedRandom<T extends string>(weights: Record<T, number>): T {
   const entries = Object.entries(weights) as Array<[T, number]>
   const total = entries.reduce((sum, [, w]) => sum + w, 0)
-  let r = Math.random() * total
+  let remaining = Math.random() * total
   for (const [key, weight] of entries) {
-    r -= weight
-    if (r <= 0) return key
+    remaining -= weight
+    if (remaining <= 0) return key
   }
   return entries[entries.length - 1][0]
 }
