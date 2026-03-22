@@ -1,9 +1,11 @@
 import { describe, expect, it } from 'vitest'
 import { playSingleGame, runSelfPlay, formatSelfPlayResults, formatAllGameLogs } from '../selfplay'
 import type { AgentConfig } from '../agent'
+import { SETUP_STRATEGIES, OPENING_STRATEGIES, TACTIC_STRATEGIES } from '../agent'
 import { formatGameLog } from '../logger'
 import { analyzeResults, formatAnalysisReport } from '../analysis'
 import { generateStrategyMarkdown } from '../strategy-tracker'
+import { createInitialWeights } from '../learning'
 
 const randomP1: AgentConfig = { name: 'Random-P1', strategy: 'random' }
 const randomP2: AgentConfig = { name: 'Random-P2', strategy: 'random' }
@@ -140,5 +142,55 @@ describe('strategy tracker', () => {
     expect(markdown).toContain("## Strategies That Don't Work")
     expect(markdown).toContain('## Game Balance & Solvability')
     expect(markdown).toContain('### Rule Change Recommendations')
+  })
+})
+
+describe('learning strategy in self-play', () => {
+  it('tracks resolved strategies on game logs for learning agents', () => {
+    const weights = createInitialWeights()
+    const learnerP1: AgentConfig = { name: 'Learner-P1', strategy: 'learning', learnedWeights: weights }
+    const log = playSingleGame(1, learnerP1, randomP2, 500)
+
+    expect(log.p1Strategy).toBeDefined()
+    expect(SETUP_STRATEGIES).toContain(log.p1Strategy!.setup)
+    expect(OPENING_STRATEGIES).toContain(log.p1Strategy!.opening)
+    expect(TACTIC_STRATEGIES).toContain(log.p1Strategy!.tactic)
+    expect(log.p2Strategy).toBeUndefined()
+  })
+
+  it('tracks strategies for both players when both are learning', () => {
+    const weights = createInitialWeights()
+    const learnerP1: AgentConfig = { name: 'Learner-P1', strategy: 'learning', learnedWeights: weights }
+    const learnerP2: AgentConfig = { name: 'Learner-P2', strategy: 'learning', learnedWeights: weights }
+    const log = playSingleGame(1, learnerP1, learnerP2, 500)
+
+    expect(log.p1Strategy).toBeDefined()
+    expect(log.p2Strategy).toBeDefined()
+  })
+
+  it('does not set strategy on logs for non-learning agents', () => {
+    const log = playSingleGame(1, randomP1, randomP2, 500)
+
+    expect(log.p1Strategy).toBeUndefined()
+    expect(log.p2Strategy).toBeUndefined()
+  })
+
+  it('reinforces the actual strategies used in each game via runSelfPlay', () => {
+    const weights = createInitialWeights()
+    const learnerP1: AgentConfig = { name: 'Learner-P1', strategy: 'learning', learnedWeights: weights }
+
+    const result = runSelfPlay({
+      p1: learnerP1,
+      p2: randomP2,
+      numGames: 5,
+      maxTurns: 500,
+    })
+
+    for (const log of result.logs) {
+      expect(log.p1Strategy).toBeDefined()
+      expect(SETUP_STRATEGIES).toContain(log.p1Strategy!.setup)
+      expect(OPENING_STRATEGIES).toContain(log.p1Strategy!.opening)
+      expect(TACTIC_STRATEGIES).toContain(log.p1Strategy!.tactic)
+    }
   })
 })

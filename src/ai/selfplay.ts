@@ -2,7 +2,8 @@ import { createInitialGameState, applyGameAction } from '../game/engine'
 import type { GameState } from '../game/engine'
 import type { Player } from '../game/types'
 import { chooseAction } from './agent'
-import type { AgentConfig } from './agent'
+import type { AgentConfig, StrategyDetail } from './agent'
+import { pickStrategy } from './learning'
 import { createGameLog, recordMove, finalizeLog, formatGameLog } from './logger'
 import type { GameLog } from './logger'
 
@@ -24,14 +25,27 @@ export interface SelfPlayResult {
 
 const DEFAULT_MAX_TURNS = 500
 
+function resolvePerGameConfig(config: AgentConfig): { resolved: AgentConfig; strategy?: StrategyDetail } {
+  if (config.strategy === 'learning' && config.learnedWeights != null) {
+    const strategy = pickStrategy(config.learnedWeights)
+    return { resolved: { ...config, strategy }, strategy }
+  }
+  return { resolved: config }
+}
+
 export function playSingleGame(
   gameId: number,
   p1Config: AgentConfig,
   p2Config: AgentConfig,
   maxTurns: number = DEFAULT_MAX_TURNS,
 ): GameLog {
+  const { resolved: p1Resolved, strategy: p1Strategy } = resolvePerGameConfig(p1Config)
+  const { resolved: p2Resolved, strategy: p2Strategy } = resolvePerGameConfig(p2Config)
+
   let state: GameState = createInitialGameState()
   const log = createGameLog(gameId, p1Config.name, p2Config.name)
+  if (p1Strategy) log.p1Strategy = p1Strategy
+  if (p2Strategy) log.p2Strategy = p2Strategy
   let moveCount = 0
 
   let consecutiveRejections = 0
@@ -39,7 +53,7 @@ export function playSingleGame(
 
   while (state.phase !== 'finished' && moveCount < maxTurns) {
     const currentPlayer: Player = state.phase === 'setup' ? state.setupPlayer : state.turn
-    const config = currentPlayer === 'P1' ? p1Config : p2Config
+    const config = currentPlayer === 'P1' ? p1Resolved : p2Resolved
     const action = chooseAction(state, currentPlayer, config)
 
     if (action == null) {
