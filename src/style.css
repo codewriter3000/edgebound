@@ -1,0 +1,253 @@
+@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=JetBrains+Mono:wght@500&display=swap');
+
+:root {
+  --bg-a: #171a22;
+  --bg-b: #0f1118;
+  --paper: #202531;
+  --ink: #edf2ff;
+  --ink-soft: #aab3cb;
+  --line: #3e465e;
+  --accent: #ff9a4f;
+  --accent-strong: #e06b1a;
+  --p1: #62a9ff;
+  --p2: #ff7592;
+  color-scheme: dark;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: 'Space Grotesk', sans-serif;
+  color: var(--ink);
+  background: radial-gradient(circle at 18% 14%, #262d3f 0, transparent 38%),
+    radial-gradient(circle at 82% 22%, #21283a 0, transparent 44%),
+    linear-gradient(155deg, var(--bg-a), var(--bg-b));
+}
+
+#app {
+  min-height: 100vh;
+}
+
+.game-shell {
+  width: min(1200px, 100%);
+  margin: 0 auto;
+  padding: 20px;
+  display: grid;
+  gap: 14px;
+}
+
+header,
+.panel,
+.footer-actions {
+  background: var(--paper);
+  border: 2px solid var(--line);
+  border-radius: 14px;
+  box-shadow: 0 8px 16px rgba(84, 52, 23, 0.08);
+}
+
+header {
+  padding: 16px 18px;
+}
+
+h1,
+h2 {
+  margin: 0;
+}
+
+h1 {
+  font-size: clamp(1.6rem, 4vw, 2.2rem);
+  letter-spacing: 0.02em;
+}
+
+header p {
+  margin: 8px 0 0;
+  color: var(--ink-soft);
+}
+
+.panel-row {
+  display: grid;
+  gap: 14px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.panel {
+  padding: 14px;
+}
+
+.piece-list {
+  margin: 10px 0 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 8px;
+}
+
+.piece-list li {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  color: var(--ink-soft);
+  font-size: 0.95rem;
+}
+
+.controls p,
+.panel p {
+  margin: 8px 0 0;
+}
+
+.button-group {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+button {
+  border: 2px solid var(--line);
+  border-radius: 10px;
+  background: #2b3142;
+  color: var(--ink);
+  font-family: inherit;
+  font-size: 0.95rem;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 8px 11px;
+  transition: transform 120ms ease, border-color 120ms ease;
+}
+
+button:hover {
+  transform: translateY(-1px);
+  border-color: var(--accent);
+}
+
+button.active {
+  background: #3c2e22;
+  border-color: var(--accent);
+}
+
+button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.board-wrap {
+  overflow: auto;
+}
+
+.board-grid {
+  position: relative;
+  margin: 0 auto;
+  border: 3px solid #49577a;
+  border-radius: 8px;
+  background: #1c2230;
+}
+
+.cell {
+  position: absolute;
+  pointer-events: none;
+}
+
+.cell.light {
+  background: #2b3244;
+}
+
+.cell.dark {
+  background: #252c3c;
+}
+
+.spot {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  width: 14px;
+  height: 14px;
+  border-radius: 999px;
+  border: 1px solid transparent;
+  background: transparent;
+  padding: 0;
+}
+
+.spot:hover {
+  transform: translate(-50%, -50%);
+}
+
+.spot.square {
+  width: 20px;
+  height: 20px;
+  border-radius: 6px;
+}
+
+.spot.setup-valid {
+  background: rgba(37, 120, 70, 0.26);
+}
+
+.spot.move-target {
+  background: rgba(198, 93, 47, 0.36);
+  border-color: #9a3d16;
+}
+
+.piece {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  width: 34px;
+  height: 34px;
+  border-radius: 999px;
+  padding: 0;
+  display: grid;
+  place-items: center;
+  font-size: 21px;
+  line-height: 1;
+  font-family: 'JetBrains Mono', monospace;
+}
+
+.piece.p1 {
+  background: #203850;
+  border-color: var(--p1);
+  color: #d8ebff;
+}
+
+.piece.p2 {
+  background: #4a2430;
+  border-color: var(--p2);
+  color: #ffdbe2;
+}
+
+.piece:hover {
+  transform: translate(-50%, -50%);
+  filter: brightness(0.92);
+}
+
+.piece.selected {
+  box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.75), 0 0 0 6px var(--accent);
+}
+
+.piece.pick-target {
+  box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.85), 0 0 0 6px #2b8f4f;
+}
+
+.piece.locked {
+  opacity: 0.5;
+}
+
+.footer-actions {
+  padding: 12px;
+  display: flex;
+  justify-content: center;
+}
+
+@media (max-width: 860px) {
+  .panel-row {
+    grid-template-columns: 1fr;
+  }
+
+  .game-shell {
+    padding: 12px;
+  }
+
+  .board-wrap {
+    padding: 8px;
+  }
+}
