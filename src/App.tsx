@@ -26,13 +26,15 @@ import { MultiplayerClient, type ConnectionStatus } from './multiplayer/client'
 import type { PresencePlayer } from './multiplayer/protocol'
 import { clearSession, loadSession, saveSession } from './multiplayer/session'
 
+let actionCounter = 0
 function nextActionId(): string {
-  return `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`
+  actionCounter += 1
+  return `${Date.now()}-${actionCounter}`
 }
 
 export default function App() {
   const multiplayerEnabled = import.meta.env.VITE_MULTIPLAYER_ENABLED === 'true'
-  const multiplayerUrl = import.meta.env.VITE_MULTIPLAYER_URL ?? 'ws://localhost:8787'
+  const multiplayerUrl = import.meta.env.VITE_MULTIPLAYER_URL ?? 'ws://127.0.0.1:8787'
 
   const [gameState, setGameState] = useState(createInitialGameState)
   const [stateVersion, setStateVersion] = useState(0)
@@ -80,6 +82,7 @@ export default function App() {
         setConnectionStatus(status)
 
         if (status === 'connected') {
+          setLastError(null)
           const saved = loadSession()
           if (saved.roomCode != null && saved.reconnectToken != null) {
             setDisplayName(saved.playerName ?? 'Player')
