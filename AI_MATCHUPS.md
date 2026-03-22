@@ -94,7 +94,8 @@ When using per-phase strategy, all three fields (`setup`, `opening`, `tactic`) a
 | Field | Type | Required | Description |
 |---|---|---|---|
 | `name` | string | No | A custom display name for the agent. Used in output reports. Auto-generated if omitted. |
-| `strategy` | string or object | **Yes** | Either a preset (`random`, `aggressive`, `defensive`) or an object with `setup`, `opening`, and `tactic` fields. |
+| `strategy` | string or object | **Yes** | Either a preset (`random`, `aggressive`, `defensive`, `learning`) or an object with `setup`, `opening`, and `tactic` fields. |
+| `weightsFile` | string | Only for `learning` | Path to a JSON weights file (created automatically if missing). Required when strategy is `learning`. |
 
 You can mix shorthand, preset, and per-phase forms freely within the same file.
 
@@ -127,6 +128,69 @@ Preset strategies are quick shorthands that use a fixed behavior for all phases.
 3. **Picks are used only as a last resort** — only if no moves (forward or otherwise) are available at all.
 
 **When to use:** Testing a positional, avoidance-based approach. This strategy tries to reach the goal through movement rather than elimination.
+
+### `learning`
+
+**Behavior:** Uses a learned weights file to probabilistically select per-phase strategies (setup, opening, tactic) for each game. Before every game, the agent samples a strategy combination weighted by past performance. After each game, winning strategies are reinforced (weights increase by +0.1) and losing strategies are penalized (weights decrease by -0.05, with a floor of 0.05). Over hundreds of games, the agent converges toward strategy combinations that win more often.
+
+**Requires:** A `weightsFile` path on the agent config. If the file doesn't exist yet, uniform weights are created automatically. After training, the updated weights are saved back to the same file.
+
+**YAML syntax:**
+
+```yaml
+matchups:
+  - p1:
+      name: Learner
+      strategy: learning
+      weightsFile: weights/learner-p1.json
+    p2: aggressive
+```
+
+**weightsFile format (JSON):**
+
+The weights file is a JSON object that the system creates and updates automatically. You don't need to write it by hand — just point `weightsFile` at a path and the system will create it on the first run. Here's what it looks like after training:
+
+```json
+{
+  "version": 1,
+  "gamesPlayed": 100,
+  "weights": {
+    "setup": {
+      "wide-spread": 1.2,
+      "clustered-narrow": 0.85,
+      "front-loaded": 1.05,
+      "balanced": 0.9
+    },
+    "opening": {
+      "early-pick": 1.1,
+      "rush": 1.3,
+      "hold": 0.6,
+      "mixed-opening": 1.0
+    },
+    "tactic": {
+      "no-play-actions": 0.05,
+      "pick-heavy": 1.15,
+      "conservative": 0.7,
+      "movement-focused": 1.1
+    }
+  }
+}
+```
+
+Higher weights mean the agent is more likely to select that strategy. All weights start at 1.0 with uniform probability. The minimum weight is 0.05 — no strategy is ever fully eliminated.
+
+**When to use:** When you want the system to discover which strategy combinations work best against a particular opponent. Run the same config multiple times — each run loads the previous weights, plays more games, and saves updated weights. Over time the agent learns to favor winning strategies.
+
+**Multi-run training loop:**
+
+```bash
+# Each run loads the existing weights, plays games, reinforces, and saves
+npm run ai:train -- ai-matchups.yaml   # run 1: starts from uniform weights
+npm run ai:train -- ai-matchups.yaml   # run 2: loads run-1 weights, refines
+npm run ai:train -- ai-matchups.yaml   # run 3: loads run-2 weights, refines further
+```
+
+After training, the output directory includes a `<agent-name>-weights-report.md` showing the current weight distribution.
 
 ---
 
@@ -296,6 +360,13 @@ matchups:
         setup: balanced
         opening: rush
         tactic: movement-focused
+
+  # Learning agent: discovers best strategies over repeated runs
+  - p1:
+      name: Learner
+      strategy: learning
+      weightsFile: weights/learner.json
+    p2: aggressive
 ```
 
 ## Output
@@ -305,6 +376,112 @@ Results are written to the configured `outputDir`. Each run produces:
 - **Summary report** — win rates, draw rates, and aggregate statistics for each matchup.
 - **Game logs** — detailed per-game action logs for replay and analysis.
 - **Strategy analysis** — markdown report comparing strategy performance across all matchups.
+
+## How the AI Learning Pipeline Works
+
+The AI system uses a **self-play → analysis → report** pipeline that plays many games between configurable agents, classifies the emergent behavior patterns, and produces statistical reports. The `learning` strategy adds lightweight reinforcement on top: it adjusts per-phase strategy weights based on wins and losses, so that over repeated runs the agent converges toward effective strategy combinations.
+
+### Pipeline Stages
+
+```
+YAML Config → Self-Play Engine → Game Logs → Pattern Analysis → Reports
+```
+
+**1. Self-Play Engine** (`selfplay.ts`)
+
+For each matchup defined in your YAML config, the engine plays `numGames` full games:
+
+- A fresh game state is created for each game.
+- On every turn, the current player's agent selects an action based on its configured strategy (preset or per-phase).
+- The action is validated against the game engine. If rejected, the agent retries (up to 10 consecutive rejections before the game is aborted).
+- Every accepted action is recorded as a `MoveLogEntry` containing the player, action, and resulting game state.
+- A game ends when a player wins, the turn limit (`maxTurns`) is reached (draw), or the agent cannot produce a valid action.
+
+**2. Game Logger** (`logger.ts`)
+
+Each game produces a `GameLog` containing:
+
+- The game ID and which agents played.
+- A full move-by-move history with the complete game state after each action.
+- The winner (or `null` for a draw).
+- Total move count and timestamps.
+
+These logs are the raw data that all downstream analysis operates on.
+
+**3. Pattern Analysis** (`analysis.ts`)
+
+The analyzer reads the game logs and classifies emergent behavior into three categories by examining what actually happened in each game — not what the agent was told to do, but what patterns its actions produced:
+
+- **Setup patterns** — Based on the x-spread and y-spread of each player's placed pieces:
+  - `wide-spread`: x-spread ≥ 6 and y-spread ≥ 3
+  - `clustered-narrow`: x-spread ≤ 3
+  - `front-loaded`: y-spread ≤ 2
+  - `balanced`: everything else
+
+- **Opening patterns** — Based on the first 8 play-phase actions (4 per player):
+  - `early-pick`: any capture occurred in the opening moves
+  - `rush`: all moves were forward advances
+  - `hold`: no moves were forward advances
+  - `mixed-opening`: a mix of forward and non-forward moves, no captures
+
+- **Tactic patterns** — Based on the full play-phase action distribution:
+  - `pick-heavy`: captures > 30% of move count
+  - `conservative`: end-turns > 30% of total actions
+  - `no-play-actions`: zero play-phase actions taken
+  - `movement-focused`: everything else
+
+Each pattern is tracked with its **frequency** (how many games it appeared in) and **win rate** (what percentage of games with that pattern resulted in a win for that player).
+
+**4. Assessment & Recommendations**
+
+The analyzer also produces high-level assessments:
+
+- **First-player advantage** — Compares P1 and P2 win rates and flags imbalances greater than 5%.
+- **Solvability assessment** — Evaluates draw rate and game length to estimate whether the game has strategic depth or tends toward stalemates.
+- **Rule change recommendations** — Automatically suggests concrete rule changes when it detects problems like high first-player advantage (>15%), excessive draw rate (>40%), very long games (>300 avg moves), or very short decisive games (<30 avg moves with <10% draws).
+
+**5. Strategy Report** (`strategy-tracker.ts`)
+
+For each matchup, the strategy tracker generates a markdown report that separates patterns into:
+
+- **Strategies that work** — Patterns with >50% win rate appearing in at least 2 games.
+- **Strategies that don't work** — Patterns with <40% win rate appearing in at least 2 games.
+- **Game balance & solvability** — The solvability assessment, first-player advantage analysis, and rule change recommendations.
+
+All per-matchup reports plus an overall summary are combined into a single `STRATEGY_REPORT.md` in the output directory.
+
+### Reading the Output
+
+After a training run, the output directory contains:
+
+```
+ai-output/
+├── STRATEGY_REPORT.md              ← Overall summary across all matchups
+├── matchup-1-random-vs-aggressive/
+│   ├── results.md                   ← Win/loss/draw summary
+│   ├── game-logs.md                 ← Full move-by-move logs
+│   └── analysis.md                  ← Pattern analysis + recommendations
+├── matchup-2-defensive-vs-aggressive/
+│   ├── results.md
+│   ├── game-logs.md
+│   └── analysis.md
+└── ...
+```
+
+- Start with `STRATEGY_REPORT.md` for a high-level view of which strategies win and which don't.
+- Dive into a matchup's `analysis.md` to see pattern breakdowns, win rates, and rule change suggestions.
+- Use `game-logs.md` to replay individual games move-by-move if you need to understand *why* a pattern emerged.
+
+### Key Insight
+
+The per-phase strategy names (`wide-spread`, `rush`, `pick-heavy`, etc.) are shared between the **agent strategies** (what you tell an agent to do) and the **analysis patterns** (what the analyzer detects after the fact). This means you can:
+
+1. Run a baseline experiment with preset strategies (e.g. `random` vs `aggressive`).
+2. Read the analysis to see which emergent patterns correlate with winning.
+3. Build a custom per-phase agent that intentionally uses those winning patterns.
+4. Run another experiment to see if deliberately adopting those patterns improves results.
+
+This iterate-and-refine loop is the core of the AI learning workflow.
 
 ## Validation
 

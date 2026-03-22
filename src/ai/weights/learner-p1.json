@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "gamesPlayed": 1000,
+  "weights": {
+    "setup": {
+      "wide-spread": 0.05,
+      "clustered-narrow": 0.05,
+      "front-loaded": 0.05,
+      "balanced": 0.05
+    },
+    "opening": {
+      "early-pick": 0.05,
+      "rush": 0.05,
+      "hold": 0.05,
+      "mixed-opening": 0.05
+    },
+    "tactic": {
+      "no-play-actions": 0.05,
+      "pick-heavy": 0.05,
+      "conservative": 0.05,
+      "movement-focused": 0.05
+    }
+  }
+}

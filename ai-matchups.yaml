@@ -16,8 +16,6 @@ matchups:
         opening: rush
         tactic: movement-focused
     p2:
-      name: Cluster-Picker
-      strategy:
-        setup: clustered-narrow
-        opening: hold
-        tactic: conservative
+      name: Learner
+      strategy: learning
+      weightsFile: src/ai/weights/learner-p1.json

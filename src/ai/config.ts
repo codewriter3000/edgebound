@@ -29,6 +29,7 @@ type RawAgentConfig =
   | {
       name?: string
       strategy?: string | RawStrategyDetail
+      weightsFile?: string
     }
 
 interface RawAiConfig {
@@ -137,9 +138,16 @@ function normalizeAgent(
     )
   }
 
+  if (strategy === 'learning' && (raw.weightsFile == null || typeof raw.weightsFile !== 'string')) {
+    throw new Error(
+      `Matchup ${matchupIndex + 1}: ${side} uses "learning" strategy but is missing a "weightsFile" path.`,
+    )
+  }
+
   return {
     name: raw.name?.trim() || `${side}-${strategy}-${matchupIndex + 1}`,
     strategy,
+    ...(strategy === 'learning' ? { weightsFile: raw.weightsFile } : {}),
   }
 }
 

@@ -1,0 +1,8 @@
+numGames: 3
+maxTurns: 100
+matchups:
+  - p1:
+      name: Learner
+      strategy: learning
+      weightsFile: test-weights.json
+    p2: aggressive

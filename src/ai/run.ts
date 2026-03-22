@@ -6,6 +6,7 @@ import { formatStrategy } from './agent'
 import { analyzeResults, formatAnalysisReport } from './analysis'
 import { generateStrategyMarkdown } from './strategy-tracker'
 import { loadAiConfig } from './config'
+import { loadOrCreateWeights, saveWeights, reinforceWin, reinforceLoss, pickStrategy, formatWeightsReport } from './learning'
 
 const DEFAULT_NUM_GAMES = 20
 const DEFAULT_MAX_TURNS = 500
@@ -56,7 +57,7 @@ function readPositiveIntegerFromEnv(
   fallback: number,
   envName: string,
 ): number {
-  if (envValue == null) {
+  if (envValue == null || envValue === '') {
     return fallback
   }
 
@@ -101,6 +102,18 @@ function main(): void {
   let totalDraws = 0
   let totalGames = 0
 
+  // Resolve weightsFile paths relative to config dir (or cwd) and load weights
+  const configDir = loadedConfig?.sourceDir ?? process.cwd()
+  for (const matchup of matchups) {
+    for (const agent of [matchup.p1, matchup.p2]) {
+      if (agent.strategy === 'learning' && agent.weightsFile != null) {
+        const resolved = path.resolve(configDir, agent.weightsFile)
+        agent.learnedWeights = loadOrCreateWeights(resolved)
+        agent.weightsFile = resolved          // store absolute for saving later
+      }
+    }
+  }
+
   for (let m = 0; m < matchups.length; m += 1) {
     const matchup = matchups[m]
     console.log(`--- Matchup ${m + 1}: ${matchup.p1.name} (${formatStrategy(matchup.p1.strategy)}) vs ${matchup.p2.name} (${formatStrategy(matchup.p2.strategy)}) ---`)
@@ -111,6 +124,21 @@ function main(): void {
       numGames: NUM_GAMES,
       maxTurns: MAX_TURNS,
     })
+
+    // Reinforce learning agents based on game outcomes
+    for (const log of result.logs) {
+      for (const agent of [matchup.p1, matchup.p2]) {
+        if (agent.strategy !== 'learning' || agent.learnedWeights == null) continue
+        const side = agent === matchup.p1 ? 'P1' : 'P2'
+        const detail = pickStrategy(agent.learnedWeights)
+        if (log.winner === side) {
+          reinforceWin(agent.learnedWeights, detail)
+        } else if (log.winner != null) {
+          reinforceLoss(agent.learnedWeights, detail)
+        }
+        agent.learnedWeights.gamesPlayed += 1
+      }
+    }
 
     console.log(`  P1 Wins: ${result.p1Wins}, P2 Wins: ${result.p2Wins}, Draws: ${result.draws}`)
     console.log(`  Average game length: ${result.avgMoves.toFixed(1)} moves`)
@@ -174,6 +202,24 @@ function main(): void {
     path.join(OUTPUT_DIR, 'STRATEGY_REPORT.md'),
     overallSummary.join('\n'),
   )
+
+  // Save updated weights for learning agents
+  const savedWeightsPaths = new Set<string>()
+  for (const matchup of matchups) {
+    for (const agent of [matchup.p1, matchup.p2]) {
+      if (agent.strategy === 'learning' && agent.learnedWeights != null && agent.weightsFile != null) {
+        if (!savedWeightsPaths.has(agent.weightsFile)) {
+          saveWeights(agent.weightsFile, agent.learnedWeights)
+          fs.writeFileSync(
+            path.join(OUTPUT_DIR, `${agent.name}-weights-report.md`),
+            formatWeightsReport(agent.learnedWeights),
+          )
+          console.log(`Saved learned weights: ${agent.weightsFile} (${agent.learnedWeights.gamesPlayed} games)`)
+          savedWeightsPaths.add(agent.weightsFile)
+        }
+      }
+    }
+  }
 
   console.log('=== Training Complete ===')
   console.log(`Full output written to: ${OUTPUT_DIR}`)

@@ -32,6 +32,7 @@ export interface AgentConfig {
   name: string
   strategy: StrategyKind | StrategyDetail
   learnedWeights?: LearnedWeights
+  weightsFile?: string
 }
 
 export function formatStrategy(strategy: StrategyKind | StrategyDetail): string {
