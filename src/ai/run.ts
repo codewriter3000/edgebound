@@ -6,7 +6,7 @@ import { formatStrategy } from './agent'
 import { analyzeResults, formatAnalysisReport } from './analysis'
 import { generateStrategyMarkdown } from './strategy-tracker'
 import { loadAiConfig } from './config'
-import { loadOrCreateWeights, saveWeights, reinforceWin, reinforceLoss, pickStrategy, formatWeightsReport } from './learning'
+import { loadOrCreateWeights, saveWeights, reinforceWin, reinforceLoss, formatWeightsReport } from './learning'
 
 const DEFAULT_NUM_GAMES = 20
 const DEFAULT_MAX_TURNS = 500
@@ -130,7 +130,8 @@ function main(): void {
       for (const agent of [matchup.p1, matchup.p2]) {
         if (agent.strategy !== 'learning' || agent.learnedWeights == null) continue
         const side = agent === matchup.p1 ? 'P1' : 'P2'
-        const detail = pickStrategy(agent.learnedWeights)
+        const detail = side === 'P1' ? log.p1Strategy : log.p2Strategy
+        if (detail == null) continue
         if (log.winner === side) {
           reinforceWin(agent.learnedWeights, detail)
         } else if (log.winner != null) {

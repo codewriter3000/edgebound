@@ -1,5 +1,6 @@
 import type { GameState, GameAction } from '../game/engine'
 import type { Player, Piece } from '../game/types'
+import type { StrategyDetail } from './agent'
 import { pieceGlyph } from '../game/rules'
 
 export interface MoveLogEntry {
@@ -19,6 +20,8 @@ export interface GameLog {
   moves: MoveLogEntry[]
   startTime: number
   endTime: number
+  p1Strategy?: StrategyDetail
+  p2Strategy?: StrategyDetail
 }
 
 export function createGameLog(gameId: number, p1Agent: string, p2Agent: string): GameLog {
