@@ -2,8 +2,11 @@ import type { GameState, GameAction } from '../game/engine'
 import { buildOccupancyMap, computeValidMoveTargets, computeValidPickTargets } from '../game/movement'
 import { canPlaceInSetup, hasRequiredSetupSpacing } from '../game/rules'
 import { SPOT_BY_ID, ALL_SPOTS } from '../game/board'
-import { PIECE_LIMITS, SHAPES } from '../game/constants'
+import { PIECE_LIMITS, SHAPES, LATTICE_MAX } from '../game/constants'
 import type { Player, PieceType } from '../game/types'
+
+const P1_GOAL_Y = 1
+const P2_GOAL_Y = LATTICE_MAX - 1
 
 export type StrategyKind = 'random' | 'aggressive' | 'defensive'
 
@@ -111,7 +114,7 @@ function getPlayAction(state: GameState, player: Player, strategy: StrategyKind)
       return { type: 'PICK_PIECE', pieceId: pick.pieceId, targetPieceId: pick.targetPieceId }
     }
 
-    const goalY = player === 'P1' ? 1 : 19
+    const goalY = player === 'P1' ? P1_GOAL_Y : P2_GOAL_Y
     const forwardMoves = allMoves.filter((m) => {
       const spot = SPOT_BY_ID.get(m.targetSpotId)
       if (!spot) return false

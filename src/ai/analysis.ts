@@ -4,6 +4,10 @@ import type { Player, PieceType } from '../game/types'
 import { SPOT_BY_ID } from '../game/board'
 import { LATTICE_MAX } from '../game/constants'
 
+const MIDPOINT_Y = LATTICE_MAX / 2
+const PICK_HEAVY_THRESHOLD = 0.3
+const CONSERVATIVE_THRESHOLD = 0.3
+
 interface SetupPattern {
   description: string
   frequency: number
@@ -105,7 +109,7 @@ function analyzeOpeningPatterns(logs: GameLog[]): OpeningPattern[] {
         if (m.action.type !== 'MOVE_TO_SPOT') return false
         const spot = SPOT_BY_ID.get(m.action.targetSpotId)
         if (!spot) return false
-        return player === 'P1' ? spot.y <= LATTICE_MAX / 2 : spot.y >= LATTICE_MAX / 2
+        return player === 'P1' ? spot.y <= MIDPOINT_Y : spot.y >= MIDPOINT_Y
       })
 
       if (advances.length === playerMoves.length && playerMoves.length > 0) {
@@ -158,9 +162,9 @@ function analyzeTactics(logs: GameLog[]): TacticPattern[] {
       let primaryTactic: string
       if (playerMoves.length === 0) {
         primaryTactic = 'no-play-actions'
-      } else if (picks.length > moves.length * 0.3) {
+      } else if (picks.length > moves.length * PICK_HEAVY_THRESHOLD) {
         primaryTactic = 'pick-heavy'
-      } else if (endTurns.length > playerMoves.length * 0.3) {
+      } else if (endTurns.length > playerMoves.length * CONSERVATIVE_THRESHOLD) {
         primaryTactic = 'conservative'
       } else {
         primaryTactic = 'movement-focused'

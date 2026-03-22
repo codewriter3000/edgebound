@@ -34,6 +34,9 @@ export function playSingleGame(
   const log = createGameLog(gameId, p1Config.name, p2Config.name)
   let moveCount = 0
 
+  let consecutiveRejections = 0
+  const MAX_CONSECUTIVE_REJECTIONS = 10
+
   while (state.phase !== 'finished' && moveCount < maxTurns) {
     const currentPlayer: Player = state.phase === 'setup' ? state.setupPlayer : state.turn
     const config = currentPlayer === 'P1' ? p1Config : p2Config
@@ -46,9 +49,14 @@ export function playSingleGame(
     const result = applyGameAction(state, currentPlayer, action)
 
     if (!result.accepted) {
+      consecutiveRejections += 1
+      if (consecutiveRejections >= MAX_CONSECUTIVE_REJECTIONS) {
+        break
+      }
       continue
     }
 
+    consecutiveRejections = 0
     recordMove(log, currentPlayer, action, result.state)
     state = result.state
     moveCount += 1
