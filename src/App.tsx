@@ -1,7 +1,6 @@
-import { useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import GameBoard from './components/GameBoard'
 import {
-  LATTICE_MAX,
   MAX_MOVES_PER_TURN,
   PIECE_LIMITS,
   SHAPES,
@@ -10,7 +9,6 @@ import { SPOT_BY_ID } from './game/board'
 import {
   canPlaceInSetup,
   hasRequiredSetupSpacing,
-  otherPlayer,
   typeLabel,
 } from './game/rules'
 import {
@@ -18,24 +16,124 @@ import {
   computeValidMoveTargets,
   computeValidPickTargets,
 } from './game/movement'
-import type { Phase, Piece, PieceType, Player, Spot } from './game/types'
+import {
+  applyGameAction,
+  createInitialGameState,
+  type GameAction,
+} from './game/engine'
+import type { PieceType, Player, Spot } from './game/types'
+import { MultiplayerClient, type ConnectionStatus } from './multiplayer/client'
+import type { PresencePlayer } from './multiplayer/protocol'
+import { clearSession, loadSession, saveSession } from './multiplayer/session'
+
+let actionCounter = 0
+function nextActionId(): string {
+  actionCounter += 1
+  return `${Date.now()}-${actionCounter}`
+}
 
 export default function App() {
-  const [phase, setPhase] = useState<Phase>('setup')
-  const [pieces, setPieces] = useState<Piece[]>([])
-  const [setupPlayer, setSetupPlayer] = useState<Player>('P1')
-  const [turn, setTurn] = useState<Player>('P1')
-  const [winner, setWinner] = useState<Player | null>(null)
+  const multiplayerEnabled = import.meta.env.VITE_MULTIPLAYER_ENABLED === 'true'
+  const multiplayerUrl = import.meta.env.VITE_MULTIPLAYER_URL ?? 'ws://127.0.0.1:8787'
+
+  const [gameState, setGameState] = useState(createInitialGameState)
+  const [stateVersion, setStateVersion] = useState(0)
   const [selectedType, setSelectedType] = useState<PieceType>('triangle')
   const [selectedPieceId, setSelectedPieceId] = useState<string | null>(null)
   const [actionMode, setActionMode] = useState<'move' | 'pick'>('move')
-  const [actionsUsed, setActionsUsed] = useState(0)
-  const [actedPieceIds, setActedPieceIds] = useState<string[]>([])
-  const [pickPointIds, setPickPointIds] = useState<string[]>([])
+  const [lastError, setLastError] = useState<string | null>(null)
 
-  const occupancy = useMemo(() => buildOccupancyMap(pieces), [pieces])
+  const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus>('disconnected')
+  const [displayName, setDisplayName] = useState('Player')
+  const [joinCodeInput, setJoinCodeInput] = useState('')
+  const [roomCode, setRoomCode] = useState<string | null>(null)
+  const [playerSlot, setPlayerSlot] = useState<Player | null>(null)
+  const [presence, setPresence] = useState<PresencePlayer[]>([])
 
-  const blockedPickPointIds = useMemo(() => new Set(pickPointIds), [pickPointIds])
+  const clientRef = useRef<MultiplayerClient | null>(null)
+  const stateVersionRef = useRef(0)
+  const displayNameRef = useRef(displayName)
+
+  useEffect(() => {
+    stateVersionRef.current = stateVersion
+  }, [stateVersion])
+  useEffect(() => {
+    displayNameRef.current = displayName
+  }, [displayName])
+
+  const handleStateMessage = useCallback((state: ReturnType<typeof createInitialGameState>, version: number) => {
+    if (version <= stateVersionRef.current) {
+      return
+    }
+
+    setGameState(state)
+    setStateVersion(version)
+    setLastError(null)
+  }, [])
+
+  useEffect(() => {
+    if (!multiplayerEnabled) {
+      return
+    }
+
+    const client = new MultiplayerClient({
+      url: multiplayerUrl,
+      onStatus: (status) => {
+        setConnectionStatus(status)
+
+        if (status === 'connected') {
+          setLastError(null)
+          const saved = loadSession()
+          if (saved.roomCode != null && saved.reconnectToken != null) {
+            setDisplayName(saved.playerName ?? 'Player')
+            client.joinRoom(saved.roomCode, saved.playerName ?? 'Player', saved.reconnectToken)
+          }
+        }
+      },
+      onRoom: ({ roomCode: joinedCode, playerSlot, reconnectToken, state, version }) => {
+        setRoomCode(joinedCode)
+        setJoinCodeInput(joinedCode)
+        setPlayerSlot(playerSlot)
+        setGameState(state)
+        setStateVersion(version)
+        setSelectedPieceId(null)
+        setActionMode('move')
+        setLastError(null)
+        const currentName = displayNameRef.current
+        const nameToStore = currentName.trim().length > 0 ? currentName : 'Player'
+        saveSession(joinedCode, reconnectToken, nameToStore)
+      },
+      onState: (state, version) => handleStateMessage(state, version),
+      onPresence: (players) => {
+        setPresence(players)
+      },
+      onError: (message) => {
+        setLastError(message)
+      },
+    })
+
+    clientRef.current = client
+    client.connect()
+
+    return () => {
+      client.disconnect()
+      clientRef.current = null
+    }
+  }, [handleStateMessage, multiplayerEnabled, multiplayerUrl])
+
+  useEffect(() => {
+    if (selectedPieceId == null) {
+      return
+    }
+
+    const selectedExists = gameState.pieces.some((piece) => piece.id === selectedPieceId)
+    if (!selectedExists) {
+      setSelectedPieceId(null)
+    }
+  }, [gameState.pieces, selectedPieceId])
+
+  const occupancy = useMemo(() => buildOccupancyMap(gameState.pieces), [gameState.pieces])
+  const blockedPickPointIds = useMemo(() => new Set(gameState.pickPointIds), [gameState.pickPointIds])
 
   const setupCounts = useMemo(() => {
     const counts = {
@@ -43,72 +141,73 @@ export default function App() {
       P2: { triangle: 0, square: 0, circle: 0 },
     }
 
-    pieces.forEach((piece) => {
+    gameState.pieces.forEach((piece) => {
       counts[piece.owner][piece.type] += 1
     })
 
     return counts
-  }, [pieces])
+  }, [gameState.pieces])
+
+  const activePlayer = gameState.phase === 'setup' ? gameState.setupPlayer : gameState.turn
+  const canControlNow = !multiplayerEnabled || (playerSlot != null && playerSlot === activePlayer)
 
   const selectablePieces = useMemo(() => {
-    if (phase !== 'play' || actionsUsed >= MAX_MOVES_PER_TURN) {
+    if (
+      gameState.phase !== 'play' ||
+      gameState.actionsUsed >= MAX_MOVES_PER_TURN ||
+      !canControlNow
+    ) {
       return new Set<string>()
     }
 
     const ids = new Set<string>()
-    pieces.forEach((piece) => {
-      if (piece.owner === turn && !piece.locked && !actedPieceIds.includes(piece.id)) {
+    gameState.pieces.forEach((piece) => {
+      if (
+        piece.owner === gameState.turn &&
+        !piece.locked &&
+        !gameState.actedPieceIds.includes(piece.id)
+      ) {
         ids.add(piece.id)
       }
     })
 
     return ids
-  }, [phase, actionsUsed, pieces, turn, actedPieceIds])
+  }, [canControlNow, gameState])
 
   const selectedPiece =
     selectedPieceId == null
       ? null
-      : pieces.find((piece) => piece.id === selectedPieceId) ?? null
+      : gameState.pieces.find((piece) => piece.id === selectedPieceId) ?? null
 
   const validMoveTargets = useMemo(() => {
     return computeValidMoveTargets({
-      phase,
+      phase: gameState.phase,
       actionMode,
-      actionsUsed,
-      turn,
+      actionsUsed: gameState.actionsUsed,
+      turn: gameState.turn,
       selectedPiece,
-      actedPieceIds,
-      pieces,
+      actedPieceIds: gameState.actedPieceIds,
+      pieces: gameState.pieces,
       occupancy,
       blockedPickPointIds,
     })
-  }, [
-    phase,
-    actionMode,
-    actionsUsed,
-    turn,
-    selectedPiece,
-    actedPieceIds,
-    pieces,
-    occupancy,
-    blockedPickPointIds,
-  ])
+  }, [actionMode, blockedPickPointIds, gameState, occupancy, selectedPiece])
 
   const validPickTargets = useMemo(() => {
     return computeValidPickTargets({
-      phase,
+      phase: gameState.phase,
       actionMode,
-      turn,
+      turn: gameState.turn,
       selectedPiece,
-      actedPieceIds,
-      pieces,
+      actedPieceIds: gameState.actedPieceIds,
+      pieces: gameState.pieces,
       occupancy,
       blockedPickPointIds,
     })
-  }, [phase, selectedPiece, actionMode, turn, actedPieceIds, pieces, occupancy, blockedPickPointIds])
+  }, [actionMode, blockedPickPointIds, gameState, occupancy, selectedPiece])
 
   const selectedMoveHints = useMemo(() => {
-    if (phase !== 'play' || selectedPiece == null) {
+    if (gameState.phase !== 'play' || selectedPiece == null) {
       return null
     }
 
@@ -145,179 +244,96 @@ export default function App() {
       ruleSummary,
       destinationLabels: destinationSpots.map((spot) => `${spot.id} (${spot.kind})`),
     }
-  }, [phase, selectedPiece, validMoveTargets])
+  }, [gameState.phase, selectedPiece, validMoveTargets])
 
   function allPlacedFor(player: Player): boolean {
     const counts = setupCounts[player]
     return SHAPES.every((shape) => counts[shape] === PIECE_LIMITS[shape])
   }
 
-  function checkWin(nextPieces: Piece[]): Player | null {
-    const p1Reached = nextPieces.some((piece) => {
-      if (piece.owner !== 'P1') {
-        return false
-      }
-
-      const spot = SPOT_BY_ID.get(piece.spotId)
-      return spot?.kind === 'square' && spot.y === 1
-    })
-
-    if (p1Reached) {
-      return 'P1'
+  function applyLocalAction(action: GameAction): void {
+    const actor = gameState.phase === 'setup' ? gameState.setupPlayer : gameState.turn
+    const result = applyGameAction(gameState, actor, action)
+    if (!result.accepted) {
+      setLastError(result.error ?? 'Action rejected')
+      return
     }
 
-    const p2Reached = nextPieces.some((piece) => {
-      if (piece.owner !== 'P2') {
-        return false
-      }
-
-      const spot = SPOT_BY_ID.get(piece.spotId)
-      return spot?.kind === 'square' && spot.y === LATTICE_MAX - 1
-    })
-
-    if (p2Reached) {
-      return 'P2'
-    }
-
-    return null
+    setGameState(result.state)
+    setSelectedPieceId(null)
+    setLastError(null)
   }
 
-  function registerAction(updatedPieces: Piece[], actorId: string, newPickPointId?: string) {
-    const maybeWinner = checkWin(updatedPieces)
-    if (maybeWinner != null) {
-      setPieces(updatedPieces)
-      if (newPickPointId != null) {
-        setPickPointIds((prev) => (prev.includes(newPickPointId) ? prev : [...prev, newPickPointId]))
-      }
-      setWinner(maybeWinner)
-      setPhase('finished')
-      setSelectedPieceId(null)
+  function sendAction(action: GameAction): void {
+    if (!multiplayerEnabled) {
+      applyLocalAction(action)
       return
     }
 
-    setPieces(updatedPieces)
-    if (newPickPointId != null) {
-      setPickPointIds((prev) => (prev.includes(newPickPointId) ? prev : [...prev, newPickPointId]))
-    }
-
-    const nextActionsUsed = actionsUsed + 1
-    const nextActedPieceIds = actedPieceIds.includes(actorId)
-      ? actedPieceIds
-      : [...actedPieceIds, actorId]
-
-    if (nextActionsUsed >= MAX_MOVES_PER_TURN) {
-      setTurn(otherPlayer(turn))
-      setSelectedPieceId(null)
-      setActionMode('move')
-      setActionsUsed(0)
-      setActedPieceIds([])
+    if (roomCode == null) {
+      setLastError('Create or join a room first.')
       return
     }
 
-    setActionsUsed(nextActionsUsed)
-    setActedPieceIds(nextActedPieceIds)
-  }
-
-  function tryMoveToSpot(targetSpot: Spot): void {
-    if (selectedPiece == null) {
+    const client = clientRef.current
+    if (client == null) {
+      setLastError('Multiplayer client unavailable.')
       return
     }
 
-    const targetPieces = occupancy.get(targetSpot.id) ?? []
-    const enemyAtTarget = targetPieces.find((piece) => piece.owner !== turn && !piece.locked)
-
-    if (enemyAtTarget != null) {
-      const updatedPieces = pieces.map((piece) => {
-        if (piece.id === selectedPiece.id) {
-          return { ...piece, spotId: targetSpot.id, locked: true, hasMoved: true }
-        }
-
-        if (piece.id === enemyAtTarget.id) {
-          return { ...piece, locked: true }
-        }
-
-        return piece
-      })
-
-      registerAction(updatedPieces, selectedPiece.id, targetSpot.id)
-      return
-    }
-
-    const updatedPieces = pieces.map((piece) =>
-      piece.id === selectedPiece.id
-        ? { ...piece, spotId: targetSpot.id, hasMoved: true }
-        : piece,
-    )
-
-    registerAction(updatedPieces, selectedPiece.id)
+    client.sendAction(roomCode, action, nextActionId(), stateVersion)
   }
 
   function handleSpotClick(spot: Spot) {
-    if (phase === 'setup') {
-      if ((occupancy.get(spot.id)?.length ?? 0) > 0 || !canPlaceInSetup(spot, setupPlayer)) {
+    if (gameState.phase === 'setup') {
+      if (!canControlNow) {
         return
       }
 
-      const ownPieces = pieces.filter((piece) => piece.owner === setupPlayer)
+      if ((occupancy.get(spot.id)?.length ?? 0) > 0 || !canPlaceInSetup(spot, gameState.setupPlayer)) {
+        return
+      }
+
+      const ownPieces = gameState.pieces.filter((piece) => piece.owner === gameState.setupPlayer)
       if (!hasRequiredSetupSpacing(spot, ownPieces)) {
         return
       }
 
-      const currentCount = setupCounts[setupPlayer][selectedType]
-      if (currentCount >= PIECE_LIMITS[selectedType]) {
+      if (setupCounts[gameState.setupPlayer][selectedType] >= PIECE_LIMITS[selectedType]) {
         return
       }
 
-      const newPiece: Piece = {
-        id: `${setupPlayer}-${selectedType}-${currentCount + 1}`,
-        owner: setupPlayer,
-        type: selectedType,
+      sendAction({
+        type: 'PLACE_PIECE',
+        pieceType: selectedType,
         spotId: spot.id,
-        locked: false,
-        hasMoved: false,
-      }
-
-      const nextPieces = [...pieces, newPiece]
-      setPieces(nextPieces)
-
-      const currentDone = SHAPES.every((shape) => {
-        const value =
-          shape === selectedType
-            ? setupCounts[setupPlayer][shape] + 1
-            : setupCounts[setupPlayer][shape]
-        return value === PIECE_LIMITS[shape]
       })
 
-      if (currentDone) {
-        if (setupPlayer === 'P1') {
-          setSetupPlayer('P2')
-          setSelectedType('triangle')
-        } else {
-          setPhase('play')
-          setTurn('P1')
-          setSelectedPieceId(null)
-          setActionsUsed(0)
-          setActedPieceIds([])
-          setActionMode('move')
-        }
-      }
-
       return
     }
 
-    if (phase !== 'play' || selectedPiece == null || actionMode !== 'move') {
+    if (
+      gameState.phase !== 'play' ||
+      selectedPiece == null ||
+      actionMode !== 'move' ||
+      !canControlNow
+    ) {
       return
     }
 
-    if (actionsUsed >= MAX_MOVES_PER_TURN || !validMoveTargets.has(spot.id)) {
+    if (gameState.actionsUsed >= MAX_MOVES_PER_TURN || !validMoveTargets.has(spot.id)) {
       return
     }
 
-    tryMoveToSpot(spot)
+    sendAction({
+      type: 'MOVE_TO_SPOT',
+      pieceId: selectedPiece.id,
+      targetSpotId: spot.id,
+    })
   }
 
-  function handlePieceClick(piece: Piece) {
-    if (phase !== 'play') {
+  function handlePieceClick(piece: { id: string; owner: Player; spotId: string }) {
+    if (gameState.phase !== 'play' || !canControlNow) {
       return
     }
 
@@ -328,7 +344,7 @@ export default function App() {
       return
     }
 
-    if (piece.owner === turn) {
+    if (piece.owner === gameState.turn) {
       if (selectablePieces.has(piece.id)) {
         setSelectedPieceId((prev) => (prev === piece.id ? null : piece.id))
       }
@@ -340,19 +356,11 @@ export default function App() {
         return
       }
 
-      const updatedPieces = pieces.map((entry) => {
-        if (entry.id === selectedPiece.id) {
-          return { ...entry, spotId: piece.spotId, locked: true, hasMoved: true }
-        }
-
-        if (entry.id === piece.id) {
-          return { ...entry, locked: true }
-        }
-
-        return entry
+      sendAction({
+        type: 'PICK_PIECE',
+        pieceId: selectedPiece.id,
+        targetPieceId: piece.id,
       })
-
-      registerAction(updatedPieces, selectedPiece.id, piece.spotId)
       return
     }
 
@@ -361,42 +369,66 @@ export default function App() {
       return
     }
 
-    tryMoveToSpot(targetSpot)
+    sendAction({
+      type: 'MOVE_TO_SPOT',
+      pieceId: selectedPiece.id,
+      targetSpotId: targetSpot.id,
+    })
   }
 
   function endTurnEarly() {
-    if (phase !== 'play') {
+    if (gameState.phase !== 'play' || !canControlNow) {
       return
     }
 
-    setTurn((prev) => otherPlayer(prev))
-    setSelectedPieceId(null)
-    setActionsUsed(0)
-    setActedPieceIds([])
-    setActionMode('move')
+    sendAction({ type: 'END_TURN' })
   }
 
   function resetGame() {
-    setPhase('setup')
-    setPieces([])
-    setSetupPlayer('P1')
-    setTurn('P1')
-    setWinner(null)
+    if (multiplayerEnabled && roomCode != null) {
+      sendAction({ type: 'RESET_GAME' })
+      return
+    }
+
+    setGameState(createInitialGameState())
     setSelectedType('triangle')
     setSelectedPieceId(null)
     setActionMode('move')
-    setActionsUsed(0)
-    setActedPieceIds([])
-    setPickPointIds([])
+    setLastError(null)
+  }
+
+  function createRoom() {
+    const client = clientRef.current
+    if (!multiplayerEnabled || client == null) {
+      return
+    }
+
+    clearSession()
+    client.createRoom(displayName)
+  }
+
+  function joinRoom() {
+    const client = clientRef.current
+    if (!multiplayerEnabled || client == null) {
+      return
+    }
+
+    const code = joinCodeInput.trim().toUpperCase()
+    if (code.length === 0) {
+      setLastError('Enter a room code.')
+      return
+    }
+
+    client.joinRoom(code, displayName)
   }
 
   function getSpotClass(spot: Spot): string {
     const classes = ['spot', spot.kind]
 
-    if (phase === 'setup') {
-      const ownPieces = pieces.filter((piece) => piece.owner === setupPlayer)
+    if (gameState.phase === 'setup') {
+      const ownPieces = gameState.pieces.filter((piece) => piece.owner === gameState.setupPlayer)
       if (
-        canPlaceInSetup(spot, setupPlayer) &&
+        canPlaceInSetup(spot, gameState.setupPlayer) &&
         (occupancy.get(spot.id)?.length ?? 0) === 0 &&
         hasRequiredSetupSpacing(spot, ownPieces)
       ) {
@@ -404,7 +436,7 @@ export default function App() {
       }
     }
 
-    if (phase === 'play' && actionMode === 'move' && validMoveTargets.has(spot.id)) {
+    if (gameState.phase === 'play' && actionMode === 'move' && validMoveTargets.has(spot.id)) {
       classes.push('move-target')
     }
 
@@ -412,9 +444,9 @@ export default function App() {
   }
 
   function canRenderSetupSpot(spot: Spot): boolean {
-    const ownPieces = pieces.filter((piece) => piece.owner === setupPlayer)
+    const ownPieces = gameState.pieces.filter((piece) => piece.owner === gameState.setupPlayer)
     return (
-      canPlaceInSetup(spot, setupPlayer) &&
+      canPlaceInSetup(spot, gameState.setupPlayer) &&
       (occupancy.get(spot.id)?.length ?? 0) === 0 &&
       hasRequiredSetupSpacing(spot, ownPieces)
     )
@@ -430,22 +462,62 @@ export default function App() {
         </p>
       </header>
 
+      {multiplayerEnabled && (
+        <section className="panel">
+          <h2>Multiplayer</h2>
+          <p>
+            Connection: <strong>{connectionStatus}</strong>
+          </p>
+          <div className="button-group">
+            <input
+              value={displayName}
+              onChange={(event) => setDisplayName(event.target.value)}
+              placeholder="Display name"
+            />
+            <button type="button" onClick={createRoom}>
+              Create Room
+            </button>
+            <input
+              value={joinCodeInput}
+              onChange={(event) => setJoinCodeInput(event.target.value.toUpperCase())}
+              placeholder="Room code"
+            />
+            <button type="button" onClick={joinRoom}>
+              Join Room
+            </button>
+          </div>
+          {roomCode != null && (
+            <p>
+              Room: <strong>{roomCode}</strong> | You are <strong>{playerSlot ?? 'observer'}</strong>
+            </p>
+          )}
+          {presence.length > 0 && (
+            <p>
+              Players:{' '}
+              {presence
+                .map((player) => `${player.slot} ${player.displayName}${player.connected ? '' : ' (offline)'}`)
+                .join(' | ')}
+            </p>
+          )}
+        </section>
+      )}
+
       <section className="panel-row">
         <div className="panel">
           <h2>Status</h2>
-          {phase === 'setup' && (
+          {gameState.phase === 'setup' && (
             <p>
-              Setup: <strong>{setupPlayer}</strong> places pieces on their half.
+              Setup: <strong>{gameState.setupPlayer}</strong> places pieces on their half.
             </p>
           )}
-          {phase === 'play' && (
+          {gameState.phase === 'play' && (
             <p>
-              Turn: <strong>{turn}</strong> ({actionsUsed}/{MAX_MOVES_PER_TURN} actions used)
+              Turn: <strong>{gameState.turn}</strong> ({gameState.actionsUsed}/{MAX_MOVES_PER_TURN} actions used)
             </p>
           )}
-          {phase === 'finished' && winner != null && (
+          {gameState.phase === 'finished' && gameState.winner != null && (
             <p>
-              Winner: <strong>{winner}</strong>
+              Winner: <strong>{gameState.winner}</strong>
             </p>
           )}
         </div>
@@ -466,14 +538,15 @@ export default function App() {
         </div>
       </section>
 
-      {phase === 'setup' && (
+      {gameState.phase === 'setup' && (
         <section className="controls panel">
           <h2>Setup Controls</h2>
           <div className="button-group">
             {SHAPES.map((shape) => {
               const disabled =
-                setupCounts[setupPlayer][shape] >= PIECE_LIMITS[shape] ||
-                allPlacedFor(setupPlayer)
+                setupCounts[gameState.setupPlayer][shape] >= PIECE_LIMITS[shape] ||
+                allPlacedFor(gameState.setupPlayer) ||
+                !canControlNow
               return (
                 <button
                   key={shape}
@@ -496,7 +569,7 @@ export default function App() {
         </section>
       )}
 
-      {phase === 'play' && (
+      {gameState.phase === 'play' && (
         <>
           <section className="controls panel">
             <h2>Turn Controls</h2>
@@ -504,6 +577,7 @@ export default function App() {
               <button
                 type="button"
                 className={actionMode === 'move' ? 'active' : ''}
+                disabled={!canControlNow}
                 onClick={() => setActionMode('move')}
               >
                 Move
@@ -511,11 +585,12 @@ export default function App() {
               <button
                 type="button"
                 className={actionMode === 'pick' ? 'active' : ''}
+                disabled={!canControlNow}
                 onClick={() => setActionMode('pick')}
               >
                 Set Pick
               </button>
-              <button type="button" onClick={endTurnEarly}>
+              <button type="button" disabled={!canControlNow} onClick={endTurnEarly}>
                 End Turn Early
               </button>
             </div>
@@ -546,9 +621,15 @@ export default function App() {
         </>
       )}
 
+      {lastError != null && (
+        <section className="panel">
+          <p>{lastError}</p>
+        </section>
+      )}
+
       <GameBoard
-        phase={phase}
-        pieces={pieces}
+        phase={gameState.phase}
+        pieces={gameState.pieces}
         selectedPieceId={selectedPieceId}
         validMoveTargets={validMoveTargets}
         validPickTargets={validPickTargets}
