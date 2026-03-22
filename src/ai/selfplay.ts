@@ -25,10 +25,10 @@ export interface SelfPlayResult {
 
 const DEFAULT_MAX_TURNS = 500
 
-function resolvePerGameConfig(config: AgentConfig): { resolved: AgentConfig; strategy?: StrategyDetail } {
+function resolvePerGameConfig(config: AgentConfig): { resolved: AgentConfig; pickedStrategy?: StrategyDetail } {
   if (config.strategy === 'learning' && config.learnedWeights != null) {
-    const strategy = pickStrategy(config.learnedWeights)
-    return { resolved: { ...config, strategy }, strategy }
+    const pickedStrategy = pickStrategy(config.learnedWeights)
+    return { resolved: { ...config, strategy: pickedStrategy }, pickedStrategy }
   }
   return { resolved: config }
 }
@@ -39,8 +39,8 @@ export function playSingleGame(
   p2Config: AgentConfig,
   maxTurns: number = DEFAULT_MAX_TURNS,
 ): GameLog {
-  const { resolved: p1Resolved, strategy: p1Strategy } = resolvePerGameConfig(p1Config)
-  const { resolved: p2Resolved, strategy: p2Strategy } = resolvePerGameConfig(p2Config)
+  const { resolved: p1Resolved, pickedStrategy: p1Strategy } = resolvePerGameConfig(p1Config)
+  const { resolved: p2Resolved, pickedStrategy: p2Strategy } = resolvePerGameConfig(p2Config)
 
   let state: GameState = createInitialGameState()
   const log = createGameLog(gameId, p1Config.name, p2Config.name)

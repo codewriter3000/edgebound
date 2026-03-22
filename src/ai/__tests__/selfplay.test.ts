@@ -5,7 +5,7 @@ import { SETUP_STRATEGIES, OPENING_STRATEGIES, TACTIC_STRATEGIES } from '../agen
 import { formatGameLog } from '../logger'
 import { analyzeResults, formatAnalysisReport } from '../analysis'
 import { generateStrategyMarkdown } from '../strategy-tracker'
-import { createInitialWeights } from '../learning'
+import { createInitialWeights, reinforceWin, reinforceLoss } from '../learning'
 
 const randomP1: AgentConfig = { name: 'Random-P1', strategy: 'random' }
 const randomP2: AgentConfig = { name: 'Random-P2', strategy: 'random' }
@@ -191,6 +191,39 @@ describe('learning strategy in self-play', () => {
       expect(SETUP_STRATEGIES).toContain(log.p1Strategy!.setup)
       expect(OPENING_STRATEGIES).toContain(log.p1Strategy!.opening)
       expect(TACTIC_STRATEGIES).toContain(log.p1Strategy!.tactic)
+    }
+  })
+
+  it('modifies weights when reinforcing tracked strategies from game logs', () => {
+    const weights = createInitialWeights()
+    const learnerP1: AgentConfig = { name: 'Learner-P1', strategy: 'learning', learnedWeights: weights }
+
+    const result = runSelfPlay({
+      p1: learnerP1,
+      p2: randomP2,
+      numGames: 10,
+      maxTurns: 500,
+    })
+
+    // Simulate the reinforcement loop from run.ts using tracked strategies
+    const reinforcedWeights = createInitialWeights()
+    for (const log of result.logs) {
+      const detail = log.p1Strategy
+      if (detail == null) continue
+      if (log.winner === 'P1') {
+        reinforceWin(reinforcedWeights, detail)
+      } else if (log.winner != null) {
+        reinforceLoss(reinforcedWeights, detail)
+      }
+    }
+
+    // At least one game should have produced a winner, so weights should have changed
+    const decisiveGames = result.logs.filter((l) => l.winner != null)
+    if (decisiveGames.length > 0) {
+      const allSetupEqual = SETUP_STRATEGIES.every((k) => reinforcedWeights.weights.setup[k] === 1)
+      const allOpeningEqual = OPENING_STRATEGIES.every((k) => reinforcedWeights.weights.opening[k] === 1)
+      const allTacticEqual = TACTIC_STRATEGIES.every((k) => reinforcedWeights.weights.tactic[k] === 1)
+      expect(allSetupEqual && allOpeningEqual && allTacticEqual).toBe(false)
     }
   })
 })
