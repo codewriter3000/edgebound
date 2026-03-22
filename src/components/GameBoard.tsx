@@ -31,6 +31,28 @@ export default function GameBoard({
   handleSpotClick,
   handlePieceClick,
 }: GameBoardProps) {
+  const centerTopRow = GRID_SIZE / 2 - 1
+  const centerBottomRow = GRID_SIZE / 2
+  const centerLeftCol = GRID_SIZE / 2 - 1
+  const centerRightCol = GRID_SIZE / 2
+
+  function getCellClass(row: number, col: number): string {
+    const parity = (row + col) % 2 === 0 ? 'a' : 'b'
+    const inCenterBlock =
+      (row === centerTopRow || row === centerBottomRow) &&
+      (col === centerLeftCol || col === centerRightCol)
+
+    if (inCenterBlock) {
+      return `cell center-core ${parity}`
+    }
+
+    if ((row === centerTopRow || row === centerBottomRow) && !inCenterBlock) {
+      return `cell center-line ${parity}`
+    }
+
+    return `cell ${parity === 'a' ? 'dark' : 'light'}`
+  }
+
   return (
     <section className="board-wrap panel">
       <div
@@ -46,7 +68,7 @@ export default function GameBoard({
           return (
             <div
               key={`${row}-${col}`}
-              className={`cell ${(row + col) % 2 === 0 ? 'light' : 'dark'}`}
+              className={getCellClass(row, col)}
               style={{
                 left: `${col * 2 * CELL_PX + BOARD_OFFSET_PX}px`,
                 top: `${row * 2 * CELL_PX + BOARD_OFFSET_PX}px`,

@@ -1,8 +1,9 @@
 import type { GameAction, GameState } from '../game/engine'
-import type { Player } from '../game/types'
 import {
   parseServerMessage,
   type PresencePlayer,
+  type PresenceSpectator,
+  type RoomSlot,
   type ServerMessage,
 } from './protocol'
 
@@ -13,13 +14,20 @@ interface MultiplayerClientOptions {
   onStatus: (status: ConnectionStatus) => void
   onRoom: (info: {
     roomCode: string
-    playerSlot: Player
-    reconnectToken: string
+    playerSlot: RoomSlot
+    reconnectToken?: string
     state: GameState
     version: number
+    spectatorsEnabled: boolean
+    abandoned: boolean
   }) => void
   onState: (state: GameState, version: number, lastActionId?: string) => void
-  onPresence: (players: PresencePlayer[]) => void
+  onPresence: (info: {
+    players: PresencePlayer[]
+    spectators: PresenceSpectator[]
+    spectatorsEnabled: boolean
+    abandoned: boolean
+  }) => void
   onError: (message: string) => void
 }
 
@@ -85,6 +93,14 @@ export class MultiplayerClient {
     })
   }
 
+  setSpectatorsEnabled(roomCode: string, enabled: boolean): void {
+    this.send({
+      type: 'room:set-spectators',
+      roomCode,
+      enabled,
+    })
+  }
+
   sendAction(roomCode: string, action: GameAction, actionId: string, clientVersion: number): void {
     this.send({
       type: 'game:action',
@@ -107,6 +123,8 @@ export class MultiplayerClient {
         reconnectToken: message.reconnectToken,
         state: message.state,
         version: message.version,
+        spectatorsEnabled: message.spectatorsEnabled,
+        abandoned: message.abandoned,
       })
       return
     }
@@ -117,7 +135,12 @@ export class MultiplayerClient {
     }
 
     if (message.type === 'presence:update') {
-      this.options.onPresence(message.players)
+      this.options.onPresence({
+        players: message.players,
+        spectators: message.spectators,
+        spectatorsEnabled: message.spectatorsEnabled,
+        abandoned: message.abandoned,
+      })
       return
     }
 

@@ -23,7 +23,7 @@ import {
 } from './game/engine'
 import type { PieceType, Player, Spot } from './game/types'
 import { MultiplayerClient, type ConnectionStatus } from './multiplayer/client'
-import type { PresencePlayer } from './multiplayer/protocol'
+import type { PresencePlayer, PresenceSpectator, RoomSlot } from './multiplayer/protocol'
 import { clearSession, loadSession, saveSession } from './multiplayer/session'
 
 let actionCounter = 0
@@ -33,7 +33,9 @@ function nextActionId(): string {
 }
 
 export default function App() {
-  const multiplayerEnabled = import.meta.env.VITE_MULTIPLAYER_ENABLED === 'true'
+  const multiplayerEnabled =
+    import.meta.env.VITE_MULTIPLAYER_ENABLED === 'true' ||
+    (import.meta.env.DEV && import.meta.env.VITE_MULTIPLAYER_ENABLED !== 'false')
   const multiplayerUrl = import.meta.env.VITE_MULTIPLAYER_URL ?? 'ws://127.0.0.1:8787'
 
   const [gameState, setGameState] = useState(createInitialGameState)
@@ -47,8 +49,11 @@ export default function App() {
   const [displayName, setDisplayName] = useState('Player')
   const [joinCodeInput, setJoinCodeInput] = useState('')
   const [roomCode, setRoomCode] = useState<string | null>(null)
-  const [playerSlot, setPlayerSlot] = useState<Player | null>(null)
+  const [playerSlot, setPlayerSlot] = useState<RoomSlot | null>(null)
   const [presence, setPresence] = useState<PresencePlayer[]>([])
+  const [spectators, setSpectators] = useState<PresenceSpectator[]>([])
+  const [spectatorsEnabled, setSpectatorsEnabled] = useState(true)
+  const [roomAbandoned, setRoomAbandoned] = useState(false)
 
   const clientRef = useRef<MultiplayerClient | null>(null)
   const stateVersionRef = useRef(0)
@@ -66,6 +71,7 @@ export default function App() {
       return
     }
 
+    stateVersionRef.current = version
     setGameState(state)
     setStateVersion(version)
     setLastError(null)
@@ -90,22 +96,40 @@ export default function App() {
           }
         }
       },
-      onRoom: ({ roomCode: joinedCode, playerSlot, reconnectToken, state, version }) => {
+      onRoom: ({
+        roomCode: joinedCode,
+        playerSlot,
+        reconnectToken,
+        state,
+        version,
+        spectatorsEnabled,
+        abandoned,
+      }) => {
         setRoomCode(joinedCode)
         setJoinCodeInput(joinedCode)
         setPlayerSlot(playerSlot)
+        stateVersionRef.current = version
         setGameState(state)
         setStateVersion(version)
+        setSpectatorsEnabled(spectatorsEnabled)
+        setRoomAbandoned(abandoned)
         setSelectedPieceId(null)
         setActionMode('move')
         setLastError(null)
         const currentName = displayNameRef.current
         const nameToStore = currentName.trim().length > 0 ? currentName : 'Player'
-        saveSession(joinedCode, reconnectToken, nameToStore)
+        if (reconnectToken != null) {
+          saveSession(joinedCode, reconnectToken, nameToStore)
+        } else {
+          clearSession()
+        }
       },
       onState: (state, version) => handleStateMessage(state, version),
-      onPresence: (players) => {
+      onPresence: ({ players, spectators, spectatorsEnabled, abandoned }) => {
         setPresence(players)
+        setSpectators(spectators)
+        setSpectatorsEnabled(spectatorsEnabled)
+        setRoomAbandoned(abandoned)
       },
       onError: (message) => {
         setLastError(message)
@@ -149,7 +173,36 @@ export default function App() {
   }, [gameState.pieces])
 
   const activePlayer = gameState.phase === 'setup' ? gameState.setupPlayer : gameState.turn
-  const canControlNow = !multiplayerEnabled || (playerSlot != null && playerSlot === activePlayer)
+  const canControlNow =
+    !roomAbandoned && (!multiplayerEnabled || (playerSlot != null && playerSlot === activePlayer))
+  const canManageSpectators = multiplayerEnabled && (playerSlot === 'P1' || playerSlot === 'P2')
+
+  useEffect(() => {
+    if (gameState.phase !== 'setup') {
+      return
+    }
+
+    if (setupCounts[gameState.setupPlayer][selectedType] < PIECE_LIMITS[selectedType]) {
+      return
+    }
+
+    const currentIndex = SHAPES.indexOf(selectedType)
+
+    for (let i = currentIndex + 1; i < SHAPES.length; i += 1) {
+      const candidate = SHAPES[i]
+      if (setupCounts[gameState.setupPlayer][candidate] < PIECE_LIMITS[candidate]) {
+        setSelectedType(candidate)
+        return
+      }
+    }
+
+    for (const candidate of SHAPES) {
+      if (setupCounts[gameState.setupPlayer][candidate] < PIECE_LIMITS[candidate]) {
+        setSelectedType(candidate)
+        return
+      }
+    }
+  }, [gameState.phase, gameState.setupPlayer, selectedType, setupCounts])
 
   const selectablePieces = useMemo(() => {
     if (
@@ -422,6 +475,19 @@ export default function App() {
     client.joinRoom(code, displayName)
   }
 
+  function updateSpectatorsEnabled(enabled: boolean) {
+    if (!multiplayerEnabled || roomCode == null) {
+      return
+    }
+
+    const client = clientRef.current
+    if (client == null) {
+      return
+    }
+
+    client.setSpectatorsEnabled(roomCode, enabled)
+  }
+
   function getSpotClass(spot: Spot): string {
     const classes = ['spot', spot.kind]
 
@@ -444,6 +510,10 @@ export default function App() {
   }
 
   function canRenderSetupSpot(spot: Spot): boolean {
+    if (!canControlNow) {
+      return false
+    }
+
     const ownPieces = gameState.pieces.filter((piece) => piece.owner === gameState.setupPlayer)
     return (
       canPlaceInSetup(spot, gameState.setupPlayer) &&
@@ -455,7 +525,7 @@ export default function App() {
   return (
     <div className="game-shell">
       <header>
-        <h1>Grid Clash 10x10</h1>
+        <h1>Edgebound</h1>
         <p>
           Place pieces on your half, then take turns making 4 actions. First to reach
           the far square row wins.
@@ -491,6 +561,7 @@ export default function App() {
               Room: <strong>{roomCode}</strong> | You are <strong>{playerSlot ?? 'observer'}</strong>
             </p>
           )}
+          {roomAbandoned && <p>This room is locked/abandoned.</p>}
           {presence.length > 0 && (
             <p>
               Players:{' '}
@@ -498,6 +569,30 @@ export default function App() {
                 .map((player) => `${player.slot} ${player.displayName}${player.connected ? '' : ' (offline)'}`)
                 .join(' | ')}
             </p>
+          )}
+          {roomCode != null && (
+            <p>
+              Spectators: <strong>{spectators.length}</strong> ({spectatorsEnabled ? 'enabled' : 'disabled'})
+            </p>
+          )}
+          {spectators.length > 0 && <p>Spectator names: {spectators.map((s) => s.displayName).join(', ')}</p>}
+          {canManageSpectators && roomCode != null && (
+            <div className="button-group">
+              <button
+                type="button"
+                className={spectatorsEnabled ? 'active' : ''}
+                onClick={() => updateSpectatorsEnabled(true)}
+              >
+                Enable Spectators
+              </button>
+              <button
+                type="button"
+                className={!spectatorsEnabled ? 'active' : ''}
+                onClick={() => updateSpectatorsEnabled(false)}
+              >
+                Disable Spectators
+              </button>
+            </div>
           )}
         </section>
       )}
@@ -538,15 +633,14 @@ export default function App() {
         </div>
       </section>
 
-      {gameState.phase === 'setup' && (
-        <section className="controls panel">
+      {gameState.phase === 'setup' && canControlNow && (
+        <section className="controls panel setup-panel">
           <h2>Setup Controls</h2>
           <div className="button-group">
             {SHAPES.map((shape) => {
               const disabled =
                 setupCounts[gameState.setupPlayer][shape] >= PIECE_LIMITS[shape] ||
-                allPlacedFor(gameState.setupPlayer) ||
-                !canControlNow
+                allPlacedFor(gameState.setupPlayer)
               return (
                 <button
                   key={shape}
@@ -565,6 +659,15 @@ export default function App() {
           </p>
           <p>
             Place only on your half, never on corners, center line, or outer edge lines.
+          </p>
+        </section>
+      )}
+
+      {gameState.phase === 'setup' && !canControlNow && (
+        <section className="controls panel setup-panel">
+          <h2>Setup Controls</h2>
+          <p>
+            Please wait. Your opponent is currently placing setup pieces.
           </p>
         </section>
       )}
@@ -599,25 +702,6 @@ export default function App() {
               locks both pieces, and blocks that point for all uninvolved pieces.
             </p>
           </section>
-
-          {selectedMoveHints != null && (
-            <section className="controls panel">
-              <h2>Selected Piece Hints</h2>
-              <p>
-                <strong>{selectedMoveHints.pieceLabel}</strong> at{' '}
-                <strong>{selectedMoveHints.originLabel}</strong>
-              </p>
-              <p>{selectedMoveHints.ruleSummary}</p>
-              <p>
-                Legal destinations: <strong>{selectedMoveHints.destinationLabels.length}</strong>
-              </p>
-              {selectedMoveHints.destinationLabels.length > 0 ? (
-                <p>{selectedMoveHints.destinationLabels.join(', ')}</p>
-              ) : (
-                <p>No legal moves from this position this turn.</p>
-              )}
-            </section>
-          )}
         </>
       )}
 
@@ -627,17 +711,44 @@ export default function App() {
         </section>
       )}
 
-      <GameBoard
-        phase={gameState.phase}
-        pieces={gameState.pieces}
-        selectedPieceId={selectedPieceId}
-        validMoveTargets={validMoveTargets}
-        validPickTargets={validPickTargets}
-        canRenderSetupSpot={canRenderSetupSpot}
-        getSpotClass={getSpotClass}
-        handleSpotClick={handleSpotClick}
-        handlePieceClick={handlePieceClick}
-      />
+      <section className={`board-stage ${gameState.phase === 'play' ? 'play' : 'setup'}`}>
+        <GameBoard
+          phase={gameState.phase}
+          pieces={gameState.pieces}
+          selectedPieceId={selectedPieceId}
+          validMoveTargets={validMoveTargets}
+          validPickTargets={validPickTargets}
+          canRenderSetupSpot={canRenderSetupSpot}
+          getSpotClass={getSpotClass}
+          handleSpotClick={handleSpotClick}
+          handlePieceClick={handlePieceClick}
+        />
+
+        {gameState.phase === 'play' && (
+          <aside className={`panel hint-dock ${selectedMoveHints == null ? 'empty' : ''}`}>
+            <h2>Selected Piece Hints</h2>
+            {selectedMoveHints != null ? (
+              <>
+                <p>
+                  <strong>{selectedMoveHints.pieceLabel}</strong> at{' '}
+                  <strong>{selectedMoveHints.originLabel}</strong>
+                </p>
+                <p>{selectedMoveHints.ruleSummary}</p>
+                <p>
+                  Legal destinations: <strong>{selectedMoveHints.destinationLabels.length}</strong>
+                </p>
+                {selectedMoveHints.destinationLabels.length > 0 ? (
+                  <p>{selectedMoveHints.destinationLabels.join(', ')}</p>
+                ) : (
+                  <p>No legal moves from this position this turn.</p>
+                )}
+              </>
+            ) : (
+              <p>Select one of your pieces to see legal move hints.</p>
+            )}
+          </aside>
+        )}
+      </section>
 
       <section className="footer-actions">
         <button type="button" onClick={resetGame}>

@@ -12,5 +12,6 @@
     "rootDir": "src",
     "types": ["node"]
   },
-  "include": ["src/server/**/*.ts", "src/multiplayer/**/*.ts", "src/game/**/*.ts"]
+  "include": ["src/server/**/*.ts", "src/multiplayer/**/*.ts", "src/game/**/*.ts"],
+  "exclude": ["src/**/*.test.ts", "src/**/__tests__/**"]
 }

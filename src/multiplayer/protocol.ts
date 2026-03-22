@@ -1,9 +1,16 @@
 import type { GameAction, GameState } from '../game/engine'
 import type { Player } from '../game/types'
 
+export type RoomSlot = Player | 'spectator'
+
 export interface PresencePlayer {
   slot: Player
   connected: boolean
+  displayName: string
+}
+
+export interface PresenceSpectator {
+  id: string
   displayName: string
 }
 
@@ -26,6 +33,11 @@ export type ClientMessage =
       clientVersion: number
     }
   | {
+      type: 'room:set-spectators'
+      roomCode: string
+      enabled: boolean
+    }
+  | {
       type: 'ping'
     }
 
@@ -33,18 +45,22 @@ export type ServerMessage =
   | {
       type: 'room:created'
       roomCode: string
-      playerSlot: Player
+      playerSlot: RoomSlot
       reconnectToken: string
       state: GameState
       version: number
+      spectatorsEnabled: boolean
+      abandoned: boolean
     }
   | {
       type: 'room:joined'
       roomCode: string
-      playerSlot: Player
-      reconnectToken: string
+      playerSlot: RoomSlot
+      reconnectToken?: string
       state: GameState
       version: number
+      spectatorsEnabled: boolean
+      abandoned: boolean
     }
   | {
       type: 'game:state'
@@ -61,6 +77,9 @@ export type ServerMessage =
   | {
       type: 'presence:update'
       players: PresencePlayer[]
+      spectators: PresenceSpectator[]
+      spectatorsEnabled: boolean
+      abandoned: boolean
     }
   | {
       type: 'pong'

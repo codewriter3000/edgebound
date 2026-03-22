@@ -75,40 +75,36 @@ function buildMoveCandidates(piece: Piece, origin: Spot): MoveCandidate[] {
   const isVerticalLine = origin.kind === 'line' && origin.x % 2 === 0
 
   for (let step = 1; step <= maxStep; step += 1) {
-    const delta = step * 2 + 1
+    const delta = step * 2 - 1
 
     if (isHorizontalLine) {
       candidates.push(
-        { dx: delta, dy: 0, endKinds: ['square'] },
-        { dx: -delta, dy: 0, endKinds: ['square'] },
-        { dx: 1, dy: delta, endKinds: ['square'] },
-        { dx: -1, dy: delta, endKinds: ['square'] },
-        { dx: 1, dy: -delta, endKinds: ['square'] },
-        { dx: -1, dy: -delta, endKinds: ['square'] },
+        { dx: 0, dy: delta, endKinds: ['square'] },
+        { dx: 0, dy: -delta, endKinds: ['square'] },
+        { dx: delta - 1, dy: 1, endKinds: ['square'] },
+        { dx: -(delta - 1), dy: 1, endKinds: ['square'] },
+        { dx: delta - 1, dy: -1, endKinds: ['square'] },
+        { dx: -(delta - 1), dy: -1, endKinds: ['square'] },
       )
     } else if (isVerticalLine) {
       candidates.push(
-        { dx: 0, dy: delta, endKinds: ['square'] },
-        { dx: 0, dy: -delta, endKinds: ['square'] },
-        { dx: delta, dy: 1, endKinds: ['square'] },
-        { dx: delta, dy: -1, endKinds: ['square'] },
-        { dx: -delta, dy: 1, endKinds: ['square'] },
-        { dx: -delta, dy: -1, endKinds: ['square'] },
+        { dx: delta, dy: 0, endKinds: ['square'] },
+        { dx: -delta, dy: 0, endKinds: ['square'] },
+        { dx: 1, dy: delta - 1, endKinds: ['square'] },
+        { dx: -1, dy: delta - 1, endKinds: ['square'] },
+        { dx: 1, dy: -(delta - 1), endKinds: ['square'] },
+        { dx: -1, dy: -(delta - 1), endKinds: ['square'] },
       )
     } else {
       candidates.push(
-        { dx: delta, dy: 0, endKinds: ['square'] },
-        { dx: -delta, dy: 0, endKinds: ['square'] },
-        { dx: 0, dy: delta, endKinds: ['square'] },
-        { dx: 0, dy: -delta, endKinds: ['square'] },
-        { dx: 1, dy: delta, endKinds: ['square'] },
-        { dx: -1, dy: delta, endKinds: ['square'] },
-        { dx: 1, dy: -delta, endKinds: ['square'] },
-        { dx: -1, dy: -delta, endKinds: ['square'] },
         { dx: delta, dy: 1, endKinds: ['square'] },
         { dx: delta, dy: -1, endKinds: ['square'] },
         { dx: -delta, dy: 1, endKinds: ['square'] },
         { dx: -delta, dy: -1, endKinds: ['square'] },
+        { dx: 1, dy: delta, endKinds: ['square'] },
+        { dx: 1, dy: -delta, endKinds: ['square'] },
+        { dx: -1, dy: delta, endKinds: ['square'] },
+        { dx: -1, dy: -delta, endKinds: ['square'] },
       )
     }
   }
