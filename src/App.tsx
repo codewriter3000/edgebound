@@ -37,8 +37,8 @@ export default function App() {
     import.meta.env.VITE_MULTIPLAYER_ENABLED === 'true' ||
     (import.meta.env.DEV && import.meta.env.VITE_MULTIPLAYER_ENABLED !== 'false')
   const defaultWsProtocol = window.location.protocol === 'https:' ? 'wss' : 'ws'
-  const defaultWsHost = `${window.location.hostname}:8787`
-  const multiplayerUrl = import.meta.env.VITE_MULTIPLAYER_URL ?? `${defaultWsProtocol}://${defaultWsHost}`
+  const defaultWsHost = window.location.host
+  const multiplayerUrl = import.meta.env.VITE_MULTIPLAYER_URL ?? `${defaultWsProtocol}://${defaultWsHost}/ws`
 
   const [gameState, setGameState] = useState(createInitialGameState)
   const [stateVersion, setStateVersion] = useState(0)
