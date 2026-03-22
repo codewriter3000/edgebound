@@ -1,0 +1,16 @@
+{
+  "compilerOptions": {
+    "target": "ES2023",
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "lib": ["ES2023"],
+    "strict": true,
+    "skipLibCheck": true,
+    "esModuleInterop": true,
+    "resolveJsonModule": true,
+    "outDir": "dist-server",
+    "rootDir": "src",
+    "types": ["node"]
+  },
+  "include": ["src/server/**/*.ts", "src/multiplayer/**/*.ts", "src/game/**/*.ts"]
+}
