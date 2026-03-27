@@ -5,44 +5,43 @@ import type { Player } from '../types'
 function placeSetupPiecesToStartPlay() {
   let state = createInitialGameState()
 
-  const p2Placements = [
-    { pieceType: 'triangle', spotId: '3-9' },
-    { pieceType: 'triangle', spotId: '7-9' },
-    { pieceType: 'triangle', spotId: '11-9' },
-    { pieceType: 'triangle', spotId: '15-9' },
-    { pieceType: 'square', spotId: '3-5' },
-    { pieceType: 'square', spotId: '7-5' },
-    { pieceType: 'square', spotId: '11-5' },
-    { pieceType: 'circle', spotId: '5-1' },
-    { pieceType: 'circle', spotId: '13-1' },
-  ] as const
+  // New interleaved setup: P1 places 1, P2 places 2, P1 places 2, repeat.
+  // With 9 pieces each (4 triangles + 3 squares + 2 circles) the full sequence is:
+  // Turn 1 – P1:1, Turn 2 – P2:2, Turn 3 – P1:2, Turn 4 – P2:2, Turn 5 – P1:2,
+  // Turn 6 – P2:2, Turn 7 – P1:2, Turn 8 – P2:2, Turn 9 – P1:2 (P1 done), Turn 10 – P2:1.
+  const placements: { player: Player; pieceType: 'triangle' | 'square' | 'circle'; spotId: string }[] = [
+    // Turn 1 – P1 places 1
+    { player: 'P1', pieceType: 'triangle', spotId: '3-11' },
+    // Turn 2 – P2 places 2
+    { player: 'P2', pieceType: 'triangle', spotId: '3-9' },
+    { player: 'P2', pieceType: 'triangle', spotId: '7-9' },
+    // Turn 3 – P1 places 2
+    { player: 'P1', pieceType: 'triangle', spotId: '7-11' },
+    { player: 'P1', pieceType: 'triangle', spotId: '11-11' },
+    // Turn 4 – P2 places 2
+    { player: 'P2', pieceType: 'triangle', spotId: '11-9' },
+    { player: 'P2', pieceType: 'triangle', spotId: '15-9' },
+    // Turn 5 – P1 places 2
+    { player: 'P1', pieceType: 'triangle', spotId: '15-11' },
+    { player: 'P1', pieceType: 'square', spotId: '3-15' },
+    // Turn 6 – P2 places 2
+    { player: 'P2', pieceType: 'square', spotId: '3-5' },
+    { player: 'P2', pieceType: 'square', spotId: '7-5' },
+    // Turn 7 – P1 places 2
+    { player: 'P1', pieceType: 'square', spotId: '7-15' },
+    { player: 'P1', pieceType: 'square', spotId: '11-15' },
+    // Turn 8 – P2 places 2
+    { player: 'P2', pieceType: 'square', spotId: '11-5' },
+    { player: 'P2', pieceType: 'circle', spotId: '5-1' },
+    // Turn 9 – P1 places 2 (P1's last 2 pieces; P1 done after this)
+    { player: 'P1', pieceType: 'circle', spotId: '5-19' },
+    { player: 'P1', pieceType: 'circle', spotId: '13-19' },
+    // Turn 10 – P2 places 1 last piece (P2 done; setup ends)
+    { player: 'P2', pieceType: 'circle', spotId: '13-1' },
+  ]
 
-  for (const placement of p2Placements) {
-    const result = applyGameAction(state, 'P2', {
-      type: 'PLACE_PIECE',
-      pieceType: placement.pieceType,
-      spotId: placement.spotId,
-    })
-    expect(result.accepted).toBe(true)
-    state = result.state
-  }
-
-  expect(state.setupPlayer).toBe('P1')
-
-  const p1Placements = [
-    { pieceType: 'triangle', spotId: '3-11' },
-    { pieceType: 'triangle', spotId: '7-11' },
-    { pieceType: 'triangle', spotId: '11-11' },
-    { pieceType: 'triangle', spotId: '15-11' },
-    { pieceType: 'square', spotId: '3-15' },
-    { pieceType: 'square', spotId: '7-15' },
-    { pieceType: 'square', spotId: '11-15' },
-    { pieceType: 'circle', spotId: '5-19' },
-    { pieceType: 'circle', spotId: '13-19' },
-  ] as const
-
-  for (const placement of p1Placements) {
-    const result = applyGameAction(state, 'P1', {
+  for (const placement of placements) {
+    const result = applyGameAction(state, placement.player, {
       type: 'PLACE_PIECE',
       pieceType: placement.pieceType,
       spotId: placement.spotId,
@@ -57,10 +56,10 @@ function placeSetupPiecesToStartPlay() {
 describe('game engine transitions', () => {
   it('rejects out-of-turn setup placement', () => {
     const state = createInitialGameState()
-    const result = applyGameAction(state, 'P1', {
+    const result = applyGameAction(state, 'P2', {
       type: 'PLACE_PIECE',
       pieceType: 'triangle',
-      spotId: '3-11',
+      spotId: '3-9',
     })
 
     expect(result.accepted).toBe(false)

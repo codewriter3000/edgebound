@@ -22,6 +22,7 @@ export interface GameState {
   phase: Phase
   pieces: Piece[]
   setupPlayer: Player
+  setupPiecesPlacedThisTurn: number
   turn: Player
   winner: Player | null
   actionsUsed: number
@@ -63,7 +64,8 @@ export function createInitialGameState(): GameState {
   return {
     phase: 'setup',
     pieces: [],
-    setupPlayer: 'P2',
+    setupPlayer: 'P1',
+    setupPiecesPlacedThisTurn: 0,
     turn: 'P1',
     winner: null,
     actionsUsed: 0,
@@ -216,29 +218,66 @@ function applySetupPlacement(
   }
 
   const nextPieces = [...state.pieces, newPiece]
+  const newCounts = setupCounts(nextPieces)
 
-  const currentDone = SHAPES.every((shape) => {
-    const value = shape === pieceType ? counts[state.setupPlayer][shape] + 1 : counts[state.setupPlayer][shape]
-    return value === PIECE_LIMITS[shape]
-  })
+  const isCurrentPlayerDone = SHAPES.every((shape) => newCounts[state.setupPlayer][shape] === PIECE_LIMITS[shape])
+  const other = otherPlayer(state.setupPlayer)
+  const isOtherPlayerDone = SHAPES.every((shape) => newCounts[other][shape] === PIECE_LIMITS[shape])
 
-  if (!currentDone) {
+  if (isCurrentPlayerDone && isOtherPlayerDone) {
     return {
       accepted: true,
       state: {
         ...state,
+        phase: 'play',
         pieces: nextPieces,
+        setupPiecesPlacedThisTurn: 0,
+        turn: 'P1',
+        actionsUsed: 0,
+        actedPieceIds: [],
+        isFirstP1Turn: true,
       },
     }
   }
 
-  if (state.setupPlayer === 'P2') {
+  if (isCurrentPlayerDone) {
     return {
       accepted: true,
       state: {
         ...state,
         pieces: nextPieces,
-        setupPlayer: 'P1',
+        setupPlayer: other,
+        setupPiecesPlacedThisTurn: 0,
+      },
+    }
+  }
+
+  // Quota for the current setup turn:
+  // P1's very first turn (no P1 pieces placed yet) allows 1 piece; all other turns allow 2.
+  const p1PieceCountBefore = state.pieces.filter((p) => p.owner === 'P1').length
+  const quota = state.setupPlayer === 'P1' && p1PieceCountBefore === 0 ? 1 : 2
+  const newPiecesPlacedThisTurn = state.setupPiecesPlacedThisTurn + 1
+
+  if (newPiecesPlacedThisTurn >= quota) {
+    if (isOtherPlayerDone) {
+      // Other player is done; current player continues with a fresh turn.
+      return {
+        accepted: true,
+        state: {
+          ...state,
+          pieces: nextPieces,
+          setupPiecesPlacedThisTurn: 0,
+        },
+      }
+    }
+
+    return {
+      accepted: true,
+      state: {
+        ...state,
+        pieces: nextPieces,
+        setupPlayer: other,
+        setupPiecesPlacedThisTurn: 0,
       },
     }
   }
@@ -247,12 +286,8 @@ function applySetupPlacement(
     accepted: true,
     state: {
       ...state,
-      phase: 'play',
       pieces: nextPieces,
-      turn: 'P1',
-      actionsUsed: 0,
-      actedPieceIds: [],
-      isFirstP1Turn: true,
+      setupPiecesPlacedThisTurn: newPiecesPlacedThisTurn,
     },
   }
 }
