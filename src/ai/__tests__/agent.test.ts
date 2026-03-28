@@ -22,15 +22,15 @@ function applySetupForBothPlayers(config?: AgentConfig): GameState {
 }
 
 describe('AI agent', () => {
-  it('generates valid setup placements for P2', () => {
+  it('generates valid setup placements for P1', () => {
     const state = createInitialGameState()
     const config: AgentConfig = { name: 'test-agent', strategy: 'random' }
-    const action = chooseAction(state, 'P2', config)
+    const action = chooseAction(state, 'P1', config)
 
     expect(action).not.toBeNull()
     expect(action!.type).toBe('PLACE_PIECE')
 
-    const result = applyGameAction(state, 'P2', action!)
+    const result = applyGameAction(state, 'P1', action!)
     expect(result.accepted).toBe(true)
   })
 
@@ -79,6 +79,7 @@ describe('AI agent', () => {
       phase: 'finished',
       pieces: [],
       setupPlayer: 'P1',
+      setupPiecesPlacedThisTurn: 0,
       turn: 'P1',
       winner: 'P1',
       actionsUsed: 0,
@@ -96,10 +97,10 @@ describe('AI agent', () => {
       const detail: StrategyDetail = { setup, opening: 'mixed-opening', tactic: 'movement-focused' }
       const config: AgentConfig = { name: `test-${setup}`, strategy: detail }
       const state = createInitialGameState()
-      const action = chooseAction(state, 'P2', config)
+      const action = chooseAction(state, 'P1', config)
       expect(action, `setup strategy "${setup}"`).not.toBeNull()
       expect(action!.type).toBe('PLACE_PIECE')
-      const result = applyGameAction(state, 'P2', action!)
+      const result = applyGameAction(state, 'P1', action!)
       expect(result.accepted, `setup strategy "${setup}" should produce valid placement`).toBe(true)
     }
   })

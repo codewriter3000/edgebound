@@ -134,13 +134,13 @@ describe('multiplayer server integration', () => {
 
     expect(joined.playerSlot).toBe('P2')
 
-    sendJson(p2, {
+    sendJson(p1, {
       type: 'game:action',
       roomCode: created.roomCode,
       action: {
         type: 'PLACE_PIECE',
         pieceType: 'triangle',
-        spotId: '3-9',
+        spotId: '3-11',
       },
       actionId: 'a-1',
       clientVersion: 0,
@@ -184,6 +184,24 @@ describe('multiplayer server integration', () => {
     })
     await waitForMessage(p2, (msg) => msg.type === 'room:joined')
 
+    sendJson(p2, {
+      type: 'game:action',
+      roomCode: created.roomCode,
+      action: {
+        type: 'PLACE_PIECE',
+        pieceType: 'triangle',
+        spotId: '3-9',
+      },
+      actionId: 'bad-turn',
+      clientVersion: 0,
+    })
+
+    const rejected = await waitForMessage(
+      p2,
+      (msg) => msg.type === 'game:error' && msg.code === 'ACTION_REJECTED',
+    )
+    expect(rejected.type).toBe('game:error')
+
     sendJson(p1, {
       type: 'game:action',
       roomCode: created.roomCode,
@@ -192,47 +210,29 @@ describe('multiplayer server integration', () => {
         pieceType: 'triangle',
         spotId: '3-11',
       },
-      actionId: 'bad-turn',
-      clientVersion: 0,
-    })
-
-    const rejected = await waitForMessage(
-      p1,
-      (msg) => msg.type === 'game:error' && msg.code === 'ACTION_REJECTED',
-    )
-    expect(rejected.type).toBe('game:error')
-
-    sendJson(p2, {
-      type: 'game:action',
-      roomCode: created.roomCode,
-      action: {
-        type: 'PLACE_PIECE',
-        pieceType: 'triangle',
-        spotId: '3-9',
-      },
       actionId: 'dup-1',
       clientVersion: 0,
     })
 
     const firstState = await waitForMessage(
-      p2,
+      p1,
       (msg) => msg.type === 'game:state' && msg.lastActionId === 'dup-1',
     )
 
-    sendJson(p2, {
+    sendJson(p1, {
       type: 'game:action',
       roomCode: created.roomCode,
       action: {
         type: 'PLACE_PIECE',
         pieceType: 'triangle',
-        spotId: '3-9',
+        spotId: '3-11',
       },
       actionId: 'dup-1',
       clientVersion: 1,
     })
 
     const duplicateState = await waitForMessage(
-      p2,
+      p1,
       (msg) => msg.type === 'game:state' && msg.lastActionId === 'dup-1',
     )
 
@@ -267,13 +267,13 @@ describe('multiplayer server integration', () => {
     })
     await waitForMessage(p2, (msg) => msg.type === 'room:joined')
 
-    sendJson(p2, {
+    sendJson(p1, {
       type: 'game:action',
       roomCode: created.roomCode,
       action: {
         type: 'PLACE_PIECE',
         pieceType: 'triangle',
-        spotId: '3-9',
+        spotId: '3-11',
       },
       actionId: 'before-reconnect',
       clientVersion: 0,

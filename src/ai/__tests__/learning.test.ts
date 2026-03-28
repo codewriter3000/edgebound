@@ -157,12 +157,12 @@ describe('learning strategy in agent', () => {
     const weights = createInitialWeights()
     const config: AgentConfig = { name: 'test-learning', strategy: 'learning', learnedWeights: weights }
     const state = createInitialGameState()
-    const action = chooseAction(state, 'P2', config)
+    const action = chooseAction(state, 'P1', config)
 
     expect(action).not.toBeNull()
     expect(action!.type).toBe('PLACE_PIECE')
 
-    const result = applyGameAction(state, 'P2', action!)
+    const result = applyGameAction(state, 'P1', action!)
     expect(result.accepted).toBe(true)
   })
 
